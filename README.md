@@ -52,8 +52,11 @@ current release package. NaiveFox itself parses the unmodified Exclave config.
 
 ## GitHub Actions build
 
-This repository intentionally does not use a local Android build. Run
-[`build-apk.yml`](.github/workflows/build-apk.yml) manually:
+This repository intentionally does not use a local Android build. The workflow
+has no push, pull-request, tag, or scheduled trigger: it runs only through
+`workflow_dispatch`.
+
+Run [`build-apk.yml`](.github/workflows/build-apk.yml) manually:
 
 ```bash
 gh workflow run build-apk.yml --repo incident201/naivefox-android-plugin --ref main
@@ -75,13 +78,16 @@ On a clean `ubuntu-24.04` runner, the workflow:
   and the complete runtime payload inside the APK;
 - uploads `naivefox-plugin-<latest-release-tag>-arm64-v8a`, containing the APK,
   its SHA-256 file, and build metadata.
+- creates or updates the GitHub Release
+  `naivefox-plugin-<latest-release-tag>` with the same three files attached.
 
 No concrete NaiveFox version or release tag is stored in the repository. A
 rebuild always follows the latest compatible release available at that time.
 
 ## Installation and use
 
-1. Download the APK from a successful GitHub Actions artifact.
+1. Download the APK from the GitHub Release created by a successful manual
+   workflow run (the Actions artifact is also retained for 30 days).
 2. On older Exclave/SagerNet forks, uninstall the original NaiveProxy plugin
    first. Installing two applications that both publish the `naive-plugin` id
    can make provider selection ambiguous.
