@@ -100,22 +100,6 @@ debug key created during the build. The APK is installable, but an artifact from
 a different run can have a different signature. Android may therefore require
 the previously installed plugin to be removed before installing the new APK.
 
-## Verification boundary
-
-GitHub Actions verifies a clean build, dynamic release selection, checksums,
-manifest-driven packaging, the ARM64 launcher, and Android plugin metadata. The
-following integration tests still require a real ARM64 Android device with
-Exclave installed:
-
-- discovery of the APK as `naive-plugin`;
-- H2 (`https://`) and H3 (`quic://`) traffic;
-- SOCKS5 listener authentication;
-- `extra-headers`, `host-resolver-rules`, `no-post-quantum`, and an empty side
-  of upstream credentials;
-- a custom CA passed through `SSL_CERT_FILE`;
-- graceful shutdown within Exclave's interval before it sends `SIGKILL`;
-- removal of the temporary profile after a normal disconnect.
-
 ## License
 
 The plugin source is licensed under GPL-3.0-or-later; see [LICENSE](LICENSE).
