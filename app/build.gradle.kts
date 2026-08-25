@@ -61,6 +61,12 @@ android {
         abortOnError = true
         checkReleaseBuilds = true
         warningsAsErrors = true
+        disable += setOf(
+            // The project intentionally follows the Gradle/AGP pair used by NaiveProxy APKs.
+            "AndroidGradlePluginVersion",
+            // This plugin and its downloaded runtime are deliberately arm64-v8a-only.
+            "ChromeOsAbiSupport",
+        )
         htmlReport = false
         xmlReport = false
         textReport = true
