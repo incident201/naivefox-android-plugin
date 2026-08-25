@@ -165,8 +165,9 @@ jobs:
             >"$RUNNER_TEMP/apk-badging.txt"
           grep -F "package: name='com.github.incident201.naivefox.plugin'" \
             "$RUNNER_TEMP/apk-badging.txt"
-          grep -F "sdkVersion:'26'" "$RUNNER_TEMP/apk-badging.txt"
           grep -F "native-code: 'arm64-v8a'" "$RUNNER_TEMP/apk-badging.txt"
+          min_sdk=$(apkanalyzer manifest min-sdk "$apk")
+          test "$min_sdk" = "26"
 
           "$ANDROID_BUILD_TOOLS_HOME/aapt2" dump xmltree "$apk" \
             --file AndroidManifest.xml >"$RUNNER_TEMP/apk-manifest.txt"

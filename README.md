@@ -1,27 +1,29 @@
 # NaiveFox Android Plugin for Exclave
 
-Android ARM64-плагин, который позволяет Exclave запускать
-[NaiveFox](https://github.com/incident201/naivefox) как обычный native
-`naive-plugin`. Проект не собирает Firefox или NaiveFox из исходников: GitHub
-Actions каждый раз берёт latest non-prerelease Android embedded runtime из
-релизов NaiveFox, проверяет его и упаковывает в устанавливаемый APK.
+An ARM64 Android plugin that lets
+[Exclave](https://github.com/ExclaveNetwork/Exclave) run
+[NaiveFox](https://github.com/incident201/naivefox) as the standard native
+`naive-plugin`. This project does not build Firefox or NaiveFox from source.
+On every build, GitHub Actions downloads the latest non-prerelease Android
+embedded runtime from NaiveFox releases, verifies it, and packages it into an
+installable APK.
 
-Поддерживается только `arm64-v8a` и Android API 26+.
+The plugin supports `arm64-v8a` devices running Android API 26 or newer.
 
-## Как это работает
+## How it works
 
-Плагин реализует актуальный native plugin contract
-[Exclave](https://github.com/ExclaveNetwork/Exclave) и совместим с discovery
-оригинального APK из
-[NaiveProxy](https://github.com/klzgrad/naiveproxy/tree/master/apk):
+The plugin implements Exclave's current native plugin contract and follows the
+discovery contract used by the original
+[NaiveProxy APK](https://github.com/klzgrad/naiveproxy/tree/master/apk):
 
-1. APK регистрирует экспортируемый `ContentProvider` с action
-   `io.nekohasekai.sagernet.plugin.ACTION_NATIVE_PLUGIN` и metadata
-   `io.nekohasekai.sagernet.plugin.id=naive-plugin`.
-2. Single-file fast path намеренно не публикуется. Exclave использует slow path
-   `NativePluginProvider`/`PathProvider`: запрашивает список файлов, копирует их
-   в собственный `noBackupFilesDir/plugin` и применяет указанные режимы.
-3. После копирования структура имеет следующий вид:
+1. The APK registers an exported `ContentProvider` with the
+   `io.nekohasekai.sagernet.plugin.ACTION_NATIVE_PLUGIN` action and
+   `io.nekohasekai.sagernet.plugin.id=naive-plugin` metadata.
+2. The single-file executable fast path is deliberately not advertised.
+   Exclave uses the `NativePluginProvider`/`PathProvider` slow path: it requests
+   the file list, copies every file into its own `noBackupFilesDir/plugin`
+   directory, and applies the published file modes.
+3. After Exclave copies the files, the layout is:
 
    ```text
    plugin/
@@ -32,83 +34,85 @@ Actions каждый раз берёт latest non-prerelease Android embedded ru
        lib/arm64-v8a/
          libxul.so
          omni.ja
-         ...все остальные файлы из manifest.json
+         ...every other file listed by manifest.json
    ```
 
-4. Exclave запускает `naive-plugin <config-file-path>` и передаёт ему environment,
-   включая `SSL_CERT_FILE`.
-5. Launcher без изменения читает JSON, создаёт временный writable Gecko profile,
-   делает linker re-exec с runtime в `LD_LIBRARY_PATH`, загружает `libxul.so` и
-   вызывает `NaiveFoxRunEmbedded`.
-6. `SIGTERM`, которым Exclave останавливает plugin process, преобразуется в
-   `NaiveFoxRequestStop`. После штатного возврата runtime временный profile
-   удаляется.
+4. Exclave runs `naive-plugin <config-file-path>` and passes its environment,
+   including `SSL_CERT_FILE`.
+5. The launcher reads the original JSON without translating it, creates a
+   temporary writable Gecko profile, re-executes itself with the runtime on
+   `LD_LIBRARY_PATH`, loads `libxul.so`, and calls `NaiveFoxRunEmbedded`.
+6. The launcher translates `SIGTERM`, used by Exclave to stop a plugin process,
+   into `NaiveFoxRequestStop`. It removes the temporary profile after a normal
+   runtime shutdown.
 
-Provider не содержит фиксированного списка `.so`: имена, пути и modes берутся из
-проверенного `manifest.json` текущего release package. Config не преобразуется —
-его разбирает сам NaiveFox.
+The provider does not contain a fixed list of shared libraries. File names,
+paths, modes, sizes, and hashes come from the verified `manifest.json` in the
+current release package. NaiveFox itself parses the unmodified Exclave config.
 
-## Сборка в GitHub Actions
+## GitHub Actions build
 
-Локальная Android-сборка для этого репозитория не используется. Workflow
-[`build-apk.yml`](.github/workflows/build-apk.yml) запускается вручную:
+This repository intentionally does not use a local Android build. Run
+[`build-apk.yml`](.github/workflows/build-apk.yml) manually:
 
 ```bash
 gh workflow run build-apk.yml --repo incident201/naivefox-android-plugin --ref main
 gh run watch --repo incident201/naivefox-android-plugin --exit-status
 ```
 
-Workflow на чистом `ubuntu-24.04` runner:
+On a clean `ubuntu-24.04` runner, the workflow:
 
-- запрашивает GitHub API `repos/incident201/naivefox/releases/latest`;
-- находит единственную пару `*-android-aarch64.tar.xz` и `.sha256`;
-- проверяет archive checksum до распаковки;
-- запрещает небезопасные tar entries и проверяет все manifest hashes/modes;
-- компилирует launcher NDK r29 для Android API 26;
-- выполняет Android lint и собирает release-mode APK через Gradle;
-- проверяет подпись, zip alignment, manifest/plugin id, ABI/ELF и полный runtime
-  внутри APK;
-- загружает artifact
-  `naivefox-plugin-<latest-release-tag>-arm64-v8a` с APK, SHA-256 и metadata.
+- queries the GitHub API endpoint
+  `repos/incident201/naivefox/releases/latest`;
+- finds exactly one matching `*-android-aarch64.tar.xz` archive and its
+  `.sha256` asset;
+- verifies the archive checksum before extraction;
+- rejects unsafe archive entries and verifies every manifest path, hash, size,
+  and mode;
+- builds the launcher with Android NDK r29 for Android API 26;
+- runs Android lint and builds a release-mode APK with Gradle;
+- verifies signing, zip alignment, package/provider/plugin metadata, ABI/ELF,
+  and the complete runtime payload inside the APK;
+- uploads `naivefox-plugin-<latest-release-tag>-arm64-v8a`, containing the APK,
+  its SHA-256 file, and build metadata.
 
-Конкретная версия или tag NaiveFox в репозитории не зашиты. Для повторной сборки
-того же runtime необходимо, чтобы он по-прежнему был latest release; workflow по
-замыслу всегда следует latest compatible package.
+No concrete NaiveFox version or release tag is stored in the repository. A
+rebuild always follows the latest compatible release available at that time.
 
-## Установка и использование
+## Installation and use
 
-1. Скачайте APK из успешного GitHub Actions artifact.
-2. На старых Exclave/SagerNet forks предварительно удалите оригинальный
-   NaiveProxy plugin. Одновременная установка двух приложений с id
-   `naive-plugin` может давать неоднозначный выбор provider.
-3. Установите APK на ARM64-устройство с Android 8.0 или новее.
-4. Создайте обычный Naive profile в Exclave и подключитесь. Изменять Exclave или
-   его config не требуется.
+1. Download the APK from a successful GitHub Actions artifact.
+2. On older Exclave/SagerNet forks, uninstall the original NaiveProxy plugin
+   first. Installing two applications that both publish the `naive-plugin` id
+   can make provider selection ambiguous.
+3. Install the APK on an ARM64 device running Android 8.0 or newer.
+4. Create an ordinary Naive profile in Exclave and connect. Exclave and its
+   generated config require no changes.
 
-Пока в репозитории не настроены signing secrets, release-mode APK подписывается
-автоматически созданным CI debug key. APK устанавливаемый, но APK из другого run
-может иметь другую подпись; тогда перед обновлением потребуется удалить ранее
-установленный plugin.
+Until signing secrets are configured, the release-mode APK is signed with a CI
+debug key created during the build. The APK is installable, but an artifact from
+a different run can have a different signature. Android may therefore require
+the previously installed plugin to be removed before installing the new APK.
 
-## Границы проверки
+## Verification boundary
 
-GitHub Actions доказывает clean build, динамический выбор release, checksums,
-manifest-driven упаковку, ARM64 launcher и корректный Android plugin manifest.
-На реальном ARM64 Android device с установленным Exclave дополнительно нужно
-проверить:
+GitHub Actions verifies a clean build, dynamic release selection, checksums,
+manifest-driven packaging, the ARM64 launcher, and Android plugin metadata. The
+following integration tests still require a real ARM64 Android device with
+Exclave installed:
 
-- обнаружение APK как `naive-plugin`;
-- H2 (`https://`) и H3 (`quic://`) трафик;
+- discovery of the APK as `naive-plugin`;
+- H2 (`https://`) and H3 (`quic://`) traffic;
 - SOCKS5 listener authentication;
-- `extra-headers`, `host-resolver-rules`, `no-post-quantum` и пустую сторону
-  upstream credentials;
-- custom CA через `SSL_CERT_FILE`;
-- штатную остановку в интервале, который Exclave оставляет до SIGKILL;
-- удаление временного profile после обычного disconnect.
+- `extra-headers`, `host-resolver-rules`, `no-post-quantum`, and an empty side
+  of upstream credentials;
+- a custom CA passed through `SSL_CERT_FILE`;
+- graceful shutdown within Exclave's interval before it sends `SIGKILL`;
+- removal of the temporary profile after a normal disconnect.
 
-## Лицензия
+## License
 
-Исходный код этого плагина распространяется по GPL-3.0-or-later, см. [LICENSE](LICENSE).
-NaiveFox runtime скачивается только во время CI и не хранится в репозитории; его
-код и публичный API распространяются по MPL-2.0. Дополнительная информация — в
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+The plugin source is licensed under GPL-3.0-or-later; see [LICENSE](LICENSE).
+The NaiveFox runtime is downloaded only in CI and is not stored in this
+repository. Its source and public API are licensed under MPL-2.0. See
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for details.
