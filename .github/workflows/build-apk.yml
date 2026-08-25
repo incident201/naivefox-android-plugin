@@ -1,0 +1,216 @@
+name: Build NaiveFox Android plugin
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: naivefox-android-plugin-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  ANDROID_NDK_REVISION: "29.0.14206865"
+  ANDROID_BUILD_TOOLS: "36.0.0"
+  ANDROID_PLATFORM: "36"
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  build:
+    name: Build and verify arm64-v8a APK
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - name: Check out plugin source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Verify repository contains no generated runtime or APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git ls-files | grep -E '\.(apk|aab|so|tar\.xz)$'; then
+            echo 'Generated runtime/APK content must not be committed' >&2
+            exit 1
+          fi
+          if git grep -nE 'naivefox-20[0-9]{6}-[0-9a-f]{7,40}' -- .; then
+            echo 'A concrete NaiveFox release tag is hard-coded in tracked source' >&2
+            exit 1
+          fi
+
+      - name: Run runtime verifier tests
+        shell: bash
+        env:
+          PYTHONPATH: scripts
+        run: python3 -m unittest discover -s tests -v
+
+      - name: Fetch and verify latest NaiveFox Android runtime
+        id: runtime
+        shell: bash
+        run: bash scripts/fetch-naivefox-runtime.sh "$RUNNER_TEMP/naivefox-runtime"
+
+      - name: Install Android SDK and NDK packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager \
+            "platforms;android-${ANDROID_PLATFORM}" \
+            "build-tools;${ANDROID_BUILD_TOOLS}" \
+            "ndk;${ANDROID_NDK_REVISION}"
+          ndk_home="${ANDROID_HOME}/ndk/${ANDROID_NDK_REVISION}"
+          test -f "$ndk_home/source.properties"
+          grep -Fqx "Pkg.Revision = ${ANDROID_NDK_REVISION}" "$ndk_home/source.properties"
+          echo "ANDROID_NDK_HOME=$ndk_home" >>"$GITHUB_ENV"
+          echo "ANDROID_BUILD_TOOLS_HOME=${ANDROID_HOME}/build-tools/${ANDROID_BUILD_TOOLS}" \
+            >>"$GITHUB_ENV"
+
+      - name: Inspect runtime ELF files
+        shell: bash
+        env:
+          RUNTIME_ROOT: ${{ steps.runtime.outputs.runtime_root }}
+        run: |
+          set -euo pipefail
+          readelf="${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
+          while IFS= read -r -d '' library; do
+            "$readelf" --file-header "$library" >"$RUNNER_TEMP/runtime-elf-header.txt"
+            grep -Eq '^  Class:[[:space:]]+ELF64$' "$RUNNER_TEMP/runtime-elf-header.txt"
+            grep -Eq '^  Machine:[[:space:]]+AArch64$' "$RUNNER_TEMP/runtime-elf-header.txt"
+          done < <(find "$RUNTIME_ROOT" -type f -name '*.so' -print0)
+          libxul="$RUNTIME_ROOT/${{ steps.runtime.outputs.runtime_path }}/libxul.so"
+          symbols=$(
+            "$readelf" --dyn-syms --wide "$libxul" |
+              awk '$5 ~ /GLOBAL|WEAK/ && $6 == "DEFAULT" && $7 != "UND" && $8 ~ /^NaiveFox/ { sub(/@.*/, "", $8); print $8 }' |
+              sort -u
+          )
+          grep -Fqx 'NaiveFoxRunEmbedded' <<<"$symbols"
+          grep -Fqx 'NaiveFoxRequestStop' <<<"$symbols"
+          grep -Fqx 'NaiveFoxVersion' <<<"$symbols"
+
+      - name: Build ARM64 native launcher with Android NDK
+        shell: bash
+        env:
+          RUNTIME_ROOT: ${{ steps.runtime.outputs.runtime_root }}
+        run: |
+          set -euo pipefail
+          cmake -S native -B build/native -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a \
+            -DANDROID_PLATFORM=android-26 \
+            -DANDROID_STL=none \
+            -DNAIVEFOX_PACKAGE_ROOT="$RUNTIME_ROOT"
+          cmake --build build/native --target naivefox_launcher --verbose
+          launcher=build/native/naivefox_launcher
+          test -x "$launcher"
+          readelf="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
+          "$readelf" --file-header "$launcher" >"$RUNNER_TEMP/launcher-header.txt"
+          grep -Eq '^  Class:[[:space:]]+ELF64$' "$RUNNER_TEMP/launcher-header.txt"
+          grep -Eq '^  Type:[[:space:]]+DYN' "$RUNNER_TEMP/launcher-header.txt"
+          grep -Eq '^  Machine:[[:space:]]+AArch64$' "$RUNNER_TEMP/launcher-header.txt"
+          "$readelf" --program-headers "$launcher" | grep -F '/system/bin/linker64'
+
+      - name: Stage manifest-driven APK inputs
+        shell: bash
+        env:
+          RUNTIME_ROOT: ${{ steps.runtime.outputs.runtime_root }}
+        run: |
+          set -euo pipefail
+          python3 scripts/stage_apk_inputs.py \
+            --runtime-root "$RUNTIME_ROOT" \
+            --launcher build/native/naivefox_launcher \
+            --output build/plugin-inputs
+
+      - name: Lint and assemble signed release APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./gradlew --no-daemon --stacktrace \
+            -PpluginVersionCode="${GITHUB_RUN_NUMBER}" \
+            -PpluginVersionName="${{ steps.runtime.outputs.release_tag }}" \
+            :app:lintRelease :app:assembleRelease
+
+      - name: Verify APK integration and payload
+        shell: bash
+        env:
+          RUNTIME_ROOT: ${{ steps.runtime.outputs.runtime_root }}
+        run: |
+          set -euo pipefail
+          source_apk=app/build/outputs/apk/release/app-release.apk
+          test -f "$source_apk"
+          mkdir -p dist
+          apk="dist/naivefox-plugin-${{ steps.runtime.outputs.release_tag }}-arm64-v8a.apk"
+          cp "$source_apk" "$apk"
+
+          "$ANDROID_BUILD_TOOLS_HOME/apksigner" verify --verbose --print-certs "$apk"
+          "$ANDROID_BUILD_TOOLS_HOME/zipalign" -c -P 16 -v 4 "$apk"
+          "$ANDROID_BUILD_TOOLS_HOME/aapt2" dump badging "$apk" \
+            >"$RUNNER_TEMP/apk-badging.txt"
+          grep -F "package: name='com.github.incident201.naivefox.plugin'" \
+            "$RUNNER_TEMP/apk-badging.txt"
+          grep -F "sdkVersion:'26'" "$RUNNER_TEMP/apk-badging.txt"
+          grep -F "native-code: 'arm64-v8a'" "$RUNNER_TEMP/apk-badging.txt"
+
+          "$ANDROID_BUILD_TOOLS_HOME/aapt2" dump xmltree "$apk" \
+            --file AndroidManifest.xml >"$RUNNER_TEMP/apk-manifest.txt"
+          grep -F 'io.nekohasekai.sagernet.plugin.ACTION_NATIVE_PLUGIN' \
+            "$RUNNER_TEMP/apk-manifest.txt"
+          grep -F 'io.nekohasekai.sagernet.plugin.id' "$RUNNER_TEMP/apk-manifest.txt"
+          grep -F 'naive-plugin' "$RUNNER_TEMP/apk-manifest.txt"
+          if grep -F 'io.nekohasekai.sagernet.plugin.executable_path' \
+              "$RUNNER_TEMP/apk-manifest.txt"; then
+            echo 'APK must not advertise the single-file executable fast path' >&2
+            exit 1
+          fi
+
+          python3 scripts/verify_apk.py \
+            --apk "$apk" \
+            --runtime-root "$RUNTIME_ROOT" \
+            --launcher build/native/naivefox_launcher
+
+          unzip -p "$apk" lib/arm64-v8a/libnaivefox_launcher.so \
+            >"$RUNNER_TEMP/apk-launcher"
+          chmod 755 "$RUNNER_TEMP/apk-launcher"
+          readelf="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
+          "$readelf" --file-header "$RUNNER_TEMP/apk-launcher" \
+            >"$RUNNER_TEMP/apk-launcher-header.txt"
+          grep -Eq '^  Type:[[:space:]]+DYN' "$RUNNER_TEMP/apk-launcher-header.txt"
+          grep -Eq '^  Machine:[[:space:]]+AArch64$' "$RUNNER_TEMP/apk-launcher-header.txt"
+
+          (
+            cd dist
+            sha256sum "$(basename "$apk")" >"$(basename "$apk").sha256"
+          )
+          jq -n \
+            --arg release_tag '${{ steps.runtime.outputs.release_tag }}' \
+            --arg runtime_version '${{ steps.runtime.outputs.runtime_version }}' \
+            --arg archive '${{ steps.runtime.outputs.archive_name }}' \
+            --arg archive_sha256 '${{ steps.runtime.outputs.archive_sha256 }}' \
+            --arg source_sha "$GITHUB_SHA" \
+            '{release_tag: $release_tag, runtime_version: $runtime_version, source_archive: $archive, source_archive_sha256: $archive_sha256, plugin_source_sha: $source_sha}' \
+            >dist/build-metadata.json
+
+      - name: Upload installable APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: naivefox-plugin-${{ steps.runtime.outputs.release_tag }}-arm64-v8a
+          path: |
+            dist/*.apk
+            dist/*.apk.sha256
+            dist/build-metadata.json
+          if-no-files-found: error
+          retention-days: 30

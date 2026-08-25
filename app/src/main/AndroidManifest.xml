@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:installLocation="internalOnly"
+    tools:ignore="MissingLeanbackLauncher">
+
+    <uses-feature
+        android:name="android.software.leanback"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.touchscreen"
+        android:required="false" />
+
+    <application
+        android:allowBackup="false"
+        android:extractNativeLibs="true"
+        android:hasCode="true"
+        android:label="@string/app_name"
+        android:supportsRtl="true">
+        <provider
+            android:name=".RuntimeProvider"
+            android:authorities="${applicationId}.RuntimeProvider"
+            android:directBootAware="true"
+            android:exported="true"
+            android:grantUriPermissions="false"
+            tools:ignore="ExportedContentProvider">
+
+            <!-- Generic discovery used by Exclave/SagerNet plugin lists. -->
+            <intent-filter>
+                <action android:name="io.nekohasekai.sagernet.plugin.ACTION_NATIVE_PLUGIN" />
+            </intent-filter>
+
+            <!-- Current Exclave package host. -->
+            <intent-filter>
+                <action android:name="io.nekohasekai.sagernet.plugin.ACTION_NATIVE_PLUGIN" />
+                <data
+                    android:host="com.github.dyhkwong.sagernet"
+                    android:path="/naive-plugin"
+                    android:scheme="plugin" />
+            </intent-filter>
+
+            <!-- Original SagerNet/NaiveProxy compatibility host. -->
+            <intent-filter>
+                <action android:name="io.nekohasekai.sagernet.plugin.ACTION_NATIVE_PLUGIN" />
+                <data
+                    android:host="io.nekohasekai.sagernet"
+                    android:path="/naive-plugin"
+                    android:scheme="plugin" />
+            </intent-filter>
+
+            <meta-data
+                android:name="io.nekohasekai.sagernet.plugin.id"
+                android:value="naive-plugin" />
+        </provider>
+    </application>
+
+</manifest>

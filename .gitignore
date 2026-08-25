@@ -1,0 +1,17 @@
+.gradle/
+.idea/
+*.iml
+local.properties
+__pycache__/
+*.py[cod]
+
+/build/
+/app/build/
+/dist/
+
+*.apk
+*.ap_
+*.aab
+*.so
+*.tar.xz
+*.sha256
