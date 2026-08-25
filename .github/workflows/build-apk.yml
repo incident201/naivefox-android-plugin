@@ -225,7 +225,7 @@ jobs:
           set -euo pipefail
           release_tag="naivefox-plugin-${{ steps.runtime.outputs.release_tag }}"
           release_title="NaiveFox Android plugin ${{ steps.runtime.outputs.release_tag }}"
-          release_notes="Automated ARM64 Android plugin build for the latest non-prerelease NaiveFox embedded runtime.\n\nThe attached APK is signed with the CI debug key. See build-metadata.json for the runtime archive and source commit."
+          release_notes=$'Automated ARM64 Android plugin build for the latest non-prerelease NaiveFox embedded runtime.\n\nThe attached APK is signed with the CI debug key. See build-metadata.json for the runtime archive and source commit.'
           release_files=(
             "dist/naivefox-plugin-${{ steps.runtime.outputs.release_tag }}-arm64-v8a.apk"
             "dist/naivefox-plugin-${{ steps.runtime.outputs.release_tag }}-arm64-v8a.apk.sha256"
