@@ -88,7 +88,7 @@ public final class RuntimeProvider extends ContentProvider {
         putUnique(result, new PluginFile(ENTRY_PATH, null, 0755, true));
         putUnique(result, new PluginFile("runtime/manifest.json", MANIFEST_ASSET, 0644, false));
 
-        try (InputStream stream = requireContext().getAssets().open(MANIFEST_ASSET);
+        try (InputStream stream = providerContext().getAssets().open(MANIFEST_ASSET);
              ByteArrayOutputStream bytes = new ByteArrayOutputStream()) {
             byte[] buffer = new byte[16 * 1024];
             int count;
@@ -179,7 +179,7 @@ public final class RuntimeProvider extends ContentProvider {
         }
     }
 
-    private android.content.Context requireContext() {
+    private android.content.Context providerContext() {
         android.content.Context context = getContext();
         if (context == null) {
             throw new IllegalStateException("ContentProvider is not attached");
@@ -249,7 +249,7 @@ public final class RuntimeProvider extends ContentProvider {
             throw new FileNotFoundException(path);
         }
         if (file.launcher) {
-            File launcher = new File(requireContext().getApplicationInfo().nativeLibraryDir,
+            File launcher = new File(providerContext().getApplicationInfo().nativeLibraryDir,
                     LAUNCHER_LIBRARY);
             if (!launcher.isFile()) {
                 throw new FileNotFoundException(launcher.toString());
@@ -259,7 +259,7 @@ public final class RuntimeProvider extends ContentProvider {
 
         return openPipeHelper(uri, "application/octet-stream", null, file.assetPath,
                 (output, ignoredUri, ignoredMimeType, ignoredOptions, assetPath) -> {
-                    try (InputStream input = requireContext().getAssets().open(
+                    try (InputStream input = providerContext().getAssets().open(
                             assetPath, AssetManager.ACCESS_STREAMING);
                          FileOutputStream destination =
                                  new ParcelFileDescriptor.AutoCloseOutputStream(output)) {
