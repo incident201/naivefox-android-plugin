@@ -39,8 +39,8 @@ import java.util.regex.Pattern;
  * Multi-file native plugin provider implementing Exclave's slow-path contract.
  *
  * <p>The provider deliberately does not advertise an executable fast path. Exclave first asks
- * for {@code sagernet:getExecutable}, receives {@code null}, then queries and copies every path
- * below into its own no-backup plugin directory.</p>
+ * for {@code sagernet:getExecutable}; the unsupported call makes it fall back to querying and
+ * copying every path below into its own no-backup plugin directory.</p>
  */
 public final class RuntimeProvider extends ContentProvider {
     private static final String MIME_TYPE = "application/x-elf";
@@ -289,11 +289,17 @@ public final class RuntimeProvider extends ContentProvider {
         return requireSafeRelativePath(normalized);
     }
 
-    /** Force Exclave to continue from its executable fast path to the multi-file slow path. */
+    /**
+     * Force Exclave to continue from its executable fast path to the multi-file slow path.
+     *
+     * <p>This must throw, matching NativePluginProvider's default getExecutable() behavior.
+     * Some Exclave forks return directly from initNative when the provider returns null and only
+     * enter the slow path after the fast path throws.</p>
+     */
     @Override
     public Bundle call(String method, String arg, Bundle extras) {
         if (METHOD_GET_EXECUTABLE.equals(method)) {
-            return null;
+            throw new UnsupportedOperationException("Multi-file plugin requires slow path");
         }
         return super.call(method, arg, extras);
     }
