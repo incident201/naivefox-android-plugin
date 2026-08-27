@@ -32,6 +32,8 @@
 #include <unistd.h>
 #include <zlib.h>
 
+#include "runtime_manifest.h"
+
 #ifndef NAIVEFOX_RUNTIME_RELATIVE_PATH
 #  error "NAIVEFOX_RUNTIME_RELATIVE_PATH must be supplied by CMake"
 #endif
@@ -560,6 +562,19 @@ static void* ResolveSymbol(void* library, const char* name) {
   return symbol;
 }
 
+static bool PreloadAndroidSystemLibraries(void) {
+  for (size_t index = 0U; index < NAIVEFOX_ANDROID_SYSTEM_LIBRARY_COUNT;
+       ++index) {
+    const char* name = kNaiveFoxAndroidSystemLibraries[index];
+    if (!dlopen(name, RTLD_NOW | RTLD_GLOBAL)) {
+      fprintf(stderr, "naive-plugin: cannot preload Android library %s: %s\n",
+              name, dlerror());
+      return false;
+    }
+  }
+  return true;
+}
+
 static bool ResolveFunctions(void* library, RunEmbeddedFunction* run,
                              RequestStopFunction* stop,
                              VersionFunction* version) {
@@ -706,6 +721,13 @@ int main(int argc, char* argv[]) {
       !mkdtemp(profile_path) || chmod(profile_path, 0700) != 0) {
     fprintf(stderr, "naive-plugin: cannot create writable Gecko profile: %s\n",
             strerror(errno));
+    (void)RemoveProfile(runtime_root);
+    free(config);
+    return 1;
+  }
+
+  if (!PreloadAndroidSystemLibraries()) {
+    (void)RemoveProfile(profile_path);
     (void)RemoveProfile(runtime_root);
     free(config);
     return 1;
