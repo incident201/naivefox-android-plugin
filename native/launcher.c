@@ -763,6 +763,13 @@ int main(int argc, char* argv[]) {
   }
   fprintf(stderr, "naive-plugin: starting NaiveFox %s\n", version_text);
 
+  // Keep startup diagnostics narrow and useful when the host only exposes the
+  // child process streams. This module reports the Android network readiness
+  // barrier without logging the proxy configuration or credentials.
+  if (!getenv("MOZ_LOG")) {
+    (void)setenv("MOZ_LOG", "NaiveFoxNetworkStartup:5", 0);
+  }
+
   StopThreadContext stop_context = {
       .request_stop = request_stop,
       .run_entered = ATOMIC_VAR_INIT(false),
@@ -784,6 +791,10 @@ int main(int argc, char* argv[]) {
 
   atomic_store_explicit(&stop_context.run_entered, true, memory_order_release);
   int run_status = run(config, profile_path, runtime_path);
+  if (run_status != NAIVEFOX_STATUS_OK) {
+    fprintf(stderr, "naive-plugin: NaiveFox exited with status %d\n",
+            run_status);
+  }
   atomic_store_explicit(&stop_context.finished, true, memory_order_release);
   (void)pthread_kill(stop_thread, SIGUSR1);
   (void)pthread_join(stop_thread, NULL);

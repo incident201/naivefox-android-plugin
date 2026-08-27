@@ -18,6 +18,11 @@ class LauncherContractTests(unittest.TestCase):
         libxul = source.index("dlopen(libxul_path, RTLD_NOW | RTLD_GLOBAL)")
         self.assertLess(preload, libxul)
 
+    def test_runtime_failure_diagnostics_do_not_log_config(self) -> None:
+        source = LAUNCHER.read_text(encoding="utf-8")
+        self.assertIn('"NaiveFoxNetworkStartup:5"', source)
+        self.assertIn("NaiveFox exited with status %d", source)
+
 
 if __name__ == "__main__":
     unittest.main()
