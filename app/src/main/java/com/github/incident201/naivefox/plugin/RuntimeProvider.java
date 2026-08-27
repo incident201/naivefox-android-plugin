@@ -86,7 +86,7 @@ public final class RuntimeProvider extends ContentProvider {
     private Map<String, PluginFile> loadPluginFiles() {
         LinkedHashMap<String, PluginFile> result = new LinkedHashMap<>();
         putUnique(result, new PluginFile(ENTRY_PATH, null, 0755, true));
-        putUnique(result, new PluginFile("runtime/manifest.json", MANIFEST_ASSET, 0644, false));
+        putUnique(result, new PluginFile("manifest.json", MANIFEST_ASSET, 0644, false));
 
         try (InputStream stream = providerContext().getAssets().open(MANIFEST_ASSET);
              ByteArrayOutputStream bytes = new ByteArrayOutputStream()) {
@@ -125,10 +125,10 @@ public final class RuntimeProvider extends ContentProvider {
                 if ((mode & ~0777) != 0) {
                     throw new IllegalStateException("Unsafe runtime mode for " + relativePath);
                 }
-                String providerPath = "runtime/" + relativePath;
+                String providerPath = flatFileName(relativePath);
                 putUnique(result, new PluginFile(
                         providerPath,
-                        "plugin/" + providerPath,
+                        "plugin/runtime/" + relativePath,
                         mode,
                         false));
                 hasLibxul |= expectedLibxul.equals(relativePath);
@@ -177,6 +177,11 @@ public final class RuntimeProvider extends ContentProvider {
         if (files.put(file.providerPath, file) != null) {
             throw new IllegalStateException("Duplicate plugin path: " + file.providerPath);
         }
+    }
+
+    private static String flatFileName(String path) {
+        int separator = path.lastIndexOf('/');
+        return separator == -1 ? path : path.substring(separator + 1);
     }
 
     private android.content.Context providerContext() {

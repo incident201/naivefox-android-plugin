@@ -22,8 +22,9 @@ endif()
 add_executable(naivefox_launcher launcher.c)
 target_compile_features(naivefox_launcher PRIVATE c_std_11)
 target_include_directories(naivefox_launcher PRIVATE "${NAIVEFOX_PACKAGE_ROOT}/include")
+# Exclave-compatible slow paths copy files into one directory without creating parents.
 target_compile_definitions(naivefox_launcher PRIVATE
-    NAIVEFOX_RUNTIME_RELATIVE_PATH="runtime/${NAIVEFOX_RUNTIME_PATH}"
+    NAIVEFOX_RUNTIME_RELATIVE_PATH="."
 )
 target_compile_options(naivefox_launcher PRIVATE
     -Wall

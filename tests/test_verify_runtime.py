@@ -103,6 +103,16 @@ class RuntimeVerificationTests(unittest.TestCase):
         with self.assertRaisesRegex(VerificationError, "missing required symbols"):
             verify_runtime(self.root)
 
+    def test_rejects_duplicate_flat_plugin_name(self) -> None:
+        self._write("other/libdependency.so", b"other-dependency", 0o755)
+        self.manifest["files"] = self._file_manifest()
+        self.manifest["total_bytes"] = sum(
+            item["size"] for item in self.manifest["files"]
+        )
+        self._save_manifest()
+        with self.assertRaisesRegex(VerificationError, "flat plugin path"):
+            verify_runtime(self.root)
+
 
 if __name__ == "__main__":
     unittest.main()

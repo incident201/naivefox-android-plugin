@@ -28,13 +28,11 @@ discovery contract used by the original
    ```text
    plugin/
      naive-plugin                         # ARM64 PIE launcher, mode 0755
-     runtime/
-       manifest.json
-       include/NaiveFoxAPI.h
-       lib/arm64-v8a/
-         libxul.so
-         omni.ja
-         ...every other file listed by manifest.json
+     manifest.json
+     NaiveFoxAPI.h
+     libxul.so
+     omni.ja
+     ...every other file listed by manifest.json
    ```
 
 4. Exclave runs `naive-plugin <config-file-path>` and passes its environment,
@@ -47,8 +45,11 @@ discovery contract used by the original
    runtime shutdown.
 
 The provider does not contain a fixed list of shared libraries. File names,
-paths, modes, sizes, and hashes come from the verified `manifest.json` in the
-current release package. NaiveFox itself parses the unmodified Exclave config.
+modes, sizes, and hashes come from the verified `manifest.json` in the current
+release package. Files are exposed in one directory because compatible Exclave
+slow paths do not create nested directories while copying a plugin. The build
+rejects basename collisions. NaiveFox itself parses the unmodified Exclave
+config.
 
 ## GitHub Actions build
 
