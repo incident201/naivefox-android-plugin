@@ -393,7 +393,7 @@ static bool ExtractRuntimeAssets(const char* apk_path,
     uint16_t local_extra_length = ReadLittle16(local + 28U);
     uint64_t data_offset = (uint64_t)local_offset + UINT64_C(30) +
                            local_name_length + local_extra_length;
-    if (data_offset + uncompressed_size > archive_size ||
+    if (data_offset + compressed_size > archive_size ||
         !EnsureAssetParents(destination_root, relative)) {
       close(archive);
       return false;
