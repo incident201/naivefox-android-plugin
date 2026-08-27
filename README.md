@@ -19,37 +19,38 @@ discovery contract used by the original
 1. The APK registers an exported `ContentProvider` with the
    `io.nekohasekai.sagernet.plugin.ACTION_NATIVE_PLUGIN` action and
    `io.nekohasekai.sagernet.plugin.id=naive-plugin` metadata.
-2. The single-file executable fast path is deliberately not advertised.
-   Exclave uses the `NativePluginProvider`/`PathProvider` slow path: it requests
-   the file list, copies every file into its own `noBackupFilesDir/plugin`
-   directory, and applies the published file modes.
-3. After Exclave copies the files, the layout is:
+2. Exclave receives the extracted ARM64 launcher from the provider APK's
+   `nativeLibraryDir`, using the same executable fast path as the original
+   NaiveProxy plugin. This is required on current Android releases, whose
+   SELinux policy does not allow executing a binary copied into app data.
+3. On startup, the launcher reads the signed runtime assets from its own APK
+   and extracts the complete manifest-driven package into a private temporary
+   directory owned by Exclave. The resulting layout is:
 
    ```text
-   plugin/
-     naive-plugin                         # ARM64 PIE launcher, mode 0755
+   .naivefox-runtime-*/
      manifest.json
-     NaiveFoxAPI.h
-     libxul.so
-     omni.ja
-     ...every other file listed by manifest.json
+     include/NaiveFoxAPI.h
+     lib/arm64-v8a/
+       libxul.so
+       omni.ja
+       ...every other file listed by manifest.json
    ```
 
 4. Exclave runs `naive-plugin <config-file-path>` and passes its environment,
    including `SSL_CERT_FILE`.
 5. The launcher reads the original JSON without translating it, creates a
-   temporary writable Gecko profile, re-executes itself with the runtime on
-   `LD_LIBRARY_PATH`, loads `libxul.so`, and calls `NaiveFoxRunEmbedded`.
+   temporary writable Gecko profile, re-executes itself with the extracted
+   runtime on `LD_LIBRARY_PATH`, loads `libxul.so`, and calls
+   `NaiveFoxRunEmbedded`.
 6. The launcher translates `SIGTERM`, used by Exclave to stop a plugin process,
    into `NaiveFoxRequestStop`. It removes the temporary profile after a normal
-   runtime shutdown.
+   runtime shutdown, then removes both temporary directories.
 
-The provider does not contain a fixed list of shared libraries. File names,
-modes, sizes, and hashes come from the verified `manifest.json` in the current
-release package. Files are exposed in one directory because compatible Exclave
-slow paths do not create nested directories while copying a plugin. The build
-rejects basename collisions. NaiveFox itself parses the unmodified Exclave
-config.
+The launcher does not contain a fixed list of shared libraries. It extracts
+every runtime asset under the package prefix, while file names, sizes, and
+hashes are verified against `manifest.json` during the build. NaiveFox itself
+parses the unmodified Exclave config.
 
 ## GitHub Actions build
 

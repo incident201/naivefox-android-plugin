@@ -142,7 +142,6 @@ def verify_runtime(root_value: str | os.PathLike[str] | Path) -> dict[str, Any]:
         _fail("manifest files must be a non-empty list")
 
     expected_paths: set[str] = set()
-    flat_plugin_paths = {"naive-plugin", "manifest.json"}
     total_bytes = 0
     for index, item in enumerate(files):
         if not isinstance(item, dict):
@@ -151,11 +150,6 @@ def verify_runtime(root_value: str | os.PathLike[str] | Path) -> dict[str, Any]:
         if relative == "manifest.json" or relative in expected_paths:
             _fail(f"duplicate or reserved manifest file path: {relative}")
         expected_paths.add(relative)
-        flat_name = PurePosixPath(relative).name
-        if flat_name in flat_plugin_paths:
-            _fail(f"duplicate or reserved flat plugin path: {flat_name}")
-        flat_plugin_paths.add(flat_name)
-
         mode_text = item.get("mode")
         if not isinstance(mode_text, str) or not MODE_PATTERN.fullmatch(mode_text):
             _fail(f"invalid mode for {relative}: {mode_text!r}")

@@ -126,6 +126,7 @@ jobs:
           grep -Eq '^  Type:[[:space:]]+DYN' "$RUNNER_TEMP/launcher-header.txt"
           grep -Eq '^  Machine:[[:space:]]+AArch64$' "$RUNNER_TEMP/launcher-header.txt"
           "$readelf" --program-headers "$launcher" | grep -F '/system/bin/linker64'
+          "$readelf" --dynamic "$launcher" | grep -F 'Shared library: [libz.so]'
 
       - name: Stage manifest-driven APK inputs
         shell: bash
@@ -177,11 +178,9 @@ jobs:
           grep -F 'naive-plugin' "$RUNNER_TEMP/apk-manifest.txt"
           grep -F 'android:scheme' "$RUNNER_TEMP/apk-manifest.txt"
           grep -F '"plugin"' "$RUNNER_TEMP/apk-manifest.txt"
-          if grep -F 'io.nekohasekai.sagernet.plugin.executable_path' \
-              "$RUNNER_TEMP/apk-manifest.txt"; then
-            echo 'APK must not advertise the single-file executable fast path' >&2
-            exit 1
-          fi
+          grep -F 'io.nekohasekai.sagernet.plugin.executable_path' \
+            "$RUNNER_TEMP/apk-manifest.txt"
+          grep -F 'libnaivefox_launcher.so' "$RUNNER_TEMP/apk-manifest.txt"
 
           python3 scripts/verify_apk.py \
             --apk "$apk" \

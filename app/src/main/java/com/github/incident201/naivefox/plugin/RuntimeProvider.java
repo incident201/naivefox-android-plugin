@@ -36,15 +36,17 @@ import java.util.Map;
 import java.util.regex.Pattern;
 
 /**
- * Multi-file native plugin provider implementing Exclave's slow-path contract.
+ * Native plugin provider implementing Exclave's executable and file contracts.
  *
- * <p>The provider deliberately does not advertise an executable fast path. Exclave first asks
- * for {@code sagernet:getExecutable}; the unsupported call makes it fall back to querying and
- * copying every path below into its own no-backup plugin directory.</p>
+ * <p>Current Android SELinux policy only permits the launcher to execute directly from the APK's
+ * extracted native library directory. The file-query API remains available as a compatibility
+ * fallback, while the launcher obtains the multi-file runtime from signed APK assets.</p>
  */
 public final class RuntimeProvider extends ContentProvider {
     private static final String MIME_TYPE = "application/x-elf";
     private static final String METHOD_GET_EXECUTABLE = "sagernet:getExecutable";
+    private static final String EXTRA_ENTRY =
+            "io.nekohasekai.sagernet.plugin.EXTRA_ENTRY";
     private static final String COLUMN_PATH = "path";
     private static final String COLUMN_MODE = "mode";
     private static final String ENTRY_PATH = "naive-plugin";
@@ -86,7 +88,7 @@ public final class RuntimeProvider extends ContentProvider {
     private Map<String, PluginFile> loadPluginFiles() {
         LinkedHashMap<String, PluginFile> result = new LinkedHashMap<>();
         putUnique(result, new PluginFile(ENTRY_PATH, null, 0755, true));
-        putUnique(result, new PluginFile("manifest.json", MANIFEST_ASSET, 0644, false));
+        putUnique(result, new PluginFile("runtime/manifest.json", MANIFEST_ASSET, 0644, false));
 
         try (InputStream stream = providerContext().getAssets().open(MANIFEST_ASSET);
              ByteArrayOutputStream bytes = new ByteArrayOutputStream()) {
@@ -125,7 +127,7 @@ public final class RuntimeProvider extends ContentProvider {
                 if ((mode & ~0777) != 0) {
                     throw new IllegalStateException("Unsafe runtime mode for " + relativePath);
                 }
-                String providerPath = flatFileName(relativePath);
+                String providerPath = "runtime/" + relativePath;
                 putUnique(result, new PluginFile(
                         providerPath,
                         "plugin/runtime/" + relativePath,
@@ -177,11 +179,6 @@ public final class RuntimeProvider extends ContentProvider {
         if (files.put(file.providerPath, file) != null) {
             throw new IllegalStateException("Duplicate plugin path: " + file.providerPath);
         }
-    }
-
-    private static String flatFileName(String path) {
-        int separator = path.lastIndexOf('/');
-        return separator == -1 ? path : path.substring(separator + 1);
     }
 
     private android.content.Context providerContext() {
@@ -280,6 +277,11 @@ public final class RuntimeProvider extends ContentProvider {
                 });
     }
 
+    private File launcherFile() {
+        return new File(providerContext().getApplicationInfo().nativeLibraryDir,
+                LAUNCHER_LIBRARY);
+    }
+
     private static String normalizedUriPath(Uri uri) {
         String path = uri.getPath();
         if (path == null || path.isEmpty() || "/".equals(path)) {
@@ -289,17 +291,17 @@ public final class RuntimeProvider extends ContentProvider {
         return requireSafeRelativePath(normalized);
     }
 
-    /**
-     * Force Exclave to continue from its executable fast path to the multi-file slow path.
-     *
-     * <p>This must throw, matching NativePluginProvider's default getExecutable() behavior.
-     * Some Exclave forks return directly from initNative when the provider returns null and only
-     * enter the slow path after the fast path throws.</p>
-     */
+    /** Return the extracted APK launcher, which Android permits Exclave to execute directly. */
     @Override
     public Bundle call(String method, String arg, Bundle extras) {
         if (METHOD_GET_EXECUTABLE.equals(method)) {
-            throw new UnsupportedOperationException("Multi-file plugin requires slow path");
+            File launcher = launcherFile();
+            if (!launcher.isFile() || !launcher.canExecute()) {
+                throw new IllegalStateException("Extracted native launcher is unavailable");
+            }
+            Bundle result = new Bundle();
+            result.putString(EXTRA_ENTRY, launcher.getAbsolutePath());
+            return result;
         }
         return super.call(method, arg, extras);
     }

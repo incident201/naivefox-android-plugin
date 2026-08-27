@@ -16,6 +16,7 @@
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
         android:hasCode="true"
+        android:extractNativeLibs="true"
         android:icon="@drawable/ic_plugin"
         android:label="@string/app_name"
         android:roundIcon="@drawable/ic_plugin"
@@ -43,6 +44,9 @@
             <meta-data
                 android:name="io.nekohasekai.sagernet.plugin.id"
                 android:value="naive-plugin" />
+            <meta-data
+                android:name="io.nekohasekai.sagernet.plugin.executable_path"
+                android:value="libnaivefox_launcher.so" />
         </provider>
     </application>
 

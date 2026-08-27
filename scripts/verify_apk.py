@@ -55,6 +55,11 @@ def main() -> int:
             apk_path = "assets/plugin/runtime/" + relative.as_posix()
             expected_assets.add(apk_path)
             data = package.read(apk_path)
+            if package.getinfo(apk_path).compress_type not in (
+                zipfile.ZIP_STORED,
+                zipfile.ZIP_DEFLATED,
+            ):
+                parser.error(f"unsupported APK runtime compression: {relative}")
             if len(data) != item["size"]:
                 parser.error(f"APK runtime size mismatch: {relative}")
             if digest(data) != item["sha256"]:
