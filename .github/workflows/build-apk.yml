@@ -175,6 +175,8 @@ jobs:
             "$RUNNER_TEMP/apk-manifest.txt"
           grep -F 'io.nekohasekai.sagernet.plugin.id' "$RUNNER_TEMP/apk-manifest.txt"
           grep -F 'naive-plugin' "$RUNNER_TEMP/apk-manifest.txt"
+          grep -F 'android:scheme' "$RUNNER_TEMP/apk-manifest.txt"
+          grep -F '"plugin"' "$RUNNER_TEMP/apk-manifest.txt"
           if grep -F 'io.nekohasekai.sagernet.plugin.executable_path' \
               "$RUNNER_TEMP/apk-manifest.txt"; then
             echo 'APK must not advertise the single-file executable fast path' >&2

@@ -277,7 +277,7 @@ public final class RuntimeProvider extends ContentProvider {
 
     private static String normalizedUriPath(Uri uri) {
         String path = uri.getPath();
-        if (path == null || "/".equals(path)) {
+        if (path == null || path.isEmpty() || "/".equals(path)) {
             return "";
         }
         String normalized = path.startsWith("/") ? path.substring(1) : path;

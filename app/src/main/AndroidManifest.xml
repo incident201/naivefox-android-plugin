@@ -33,21 +33,10 @@
                 <action android:name="io.nekohasekai.sagernet.plugin.ACTION_NATIVE_PLUGIN" />
             </intent-filter>
 
-            <!-- Current Exclave package host. -->
+            <!-- Accept native-plugin lookup URIs from Exclave and any compatible fork. -->
             <intent-filter>
                 <action android:name="io.nekohasekai.sagernet.plugin.ACTION_NATIVE_PLUGIN" />
                 <data
-                    android:host="com.github.dyhkwong.sagernet"
-                    android:path="/naive-plugin"
-                    android:scheme="plugin" />
-            </intent-filter>
-
-            <!-- Original SagerNet/NaiveProxy compatibility host. -->
-            <intent-filter>
-                <action android:name="io.nekohasekai.sagernet.plugin.ACTION_NATIVE_PLUGIN" />
-                <data
-                    android:host="io.nekohasekai.sagernet"
-                    android:path="/naive-plugin"
                     android:scheme="plugin" />
             </intent-filter>
 
