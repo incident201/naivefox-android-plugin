@@ -97,10 +97,10 @@ rebuild always follows the latest compatible release available at that time.
 4. Create an ordinary Naive profile in Exclave and connect. Exclave and its
    generated config require no changes.
 
-Until signing secrets are configured, the release-mode APK is signed with a CI
-debug key created during the build. The APK is installable, but an artifact from
-a different run can have a different signature. Android may therefore require
-the previously installed plugin to be removed before installing the new APK.
+Release APKs are signed with the project's persistent release key. Once a
+release-signed APK is installed, later releases can update it without removing
+the plugin. Builds published before persistent signing was introduced used
+ephemeral CI debug keys and must be uninstalled once before this migration.
 
 ## License
 

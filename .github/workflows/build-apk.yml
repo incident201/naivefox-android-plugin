@@ -14,6 +14,7 @@ env:
   ANDROID_NDK_REVISION: "29.0.14206865"
   ANDROID_BUILD_TOOLS: "36.0.0"
   ANDROID_PLATFORM: "36"
+  ANDROID_SIGNING_CERT_SHA256: "cfa66ddf7b9cd4e880164e2a4679b3d2fc40ed4117d1503647e2545254385d1d"
   PYTHONUNBUFFERED: "1"
 
 jobs:
@@ -35,6 +36,28 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
+
+      - name: Prepare persistent release signing key
+        shell: bash
+        env:
+          SIGNING_KEYSTORE_BASE64: ${{ secrets.ANDROID_SIGNING_KEYSTORE_BASE64 }}
+          SIGNING_STORE_PASSWORD: ${{ secrets.ANDROID_SIGNING_STORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.ANDROID_SIGNING_KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.ANDROID_SIGNING_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          test -n "$SIGNING_KEYSTORE_BASE64"
+          test -n "$SIGNING_STORE_PASSWORD"
+          test -n "$SIGNING_KEY_ALIAS"
+          test -n "$SIGNING_KEY_PASSWORD"
+          signing_store="$RUNNER_TEMP/naivefox-plugin-release.p12"
+          printf '%s' "$SIGNING_KEYSTORE_BASE64" | base64 --decode >"$signing_store"
+          chmod 600 "$signing_store"
+          keytool -list \
+            -keystore "$signing_store" \
+            -storetype PKCS12 \
+            -storepass "$SIGNING_STORE_PASSWORD" \
+            -alias "$SIGNING_KEY_ALIAS" >/dev/null
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
@@ -141,6 +164,11 @@ jobs:
 
       - name: Lint and assemble signed release APK
         shell: bash
+        env:
+          NAIVEFOX_SIGNING_STORE_FILE: ${{ runner.temp }}/naivefox-plugin-release.p12
+          NAIVEFOX_SIGNING_STORE_PASSWORD: ${{ secrets.ANDROID_SIGNING_STORE_PASSWORD }}
+          NAIVEFOX_SIGNING_KEY_ALIAS: ${{ secrets.ANDROID_SIGNING_KEY_ALIAS }}
+          NAIVEFOX_SIGNING_KEY_PASSWORD: ${{ secrets.ANDROID_SIGNING_KEY_PASSWORD }}
         run: |
           set -euo pipefail
           ./gradlew --no-daemon --stacktrace \
@@ -160,7 +188,14 @@ jobs:
           apk="dist/naivefox-plugin-${{ steps.runtime.outputs.release_tag }}-arm64-v8a.apk"
           cp "$source_apk" "$apk"
 
-          "$ANDROID_BUILD_TOOLS_HOME/apksigner" verify --verbose --print-certs "$apk"
+          "$ANDROID_BUILD_TOOLS_HOME/apksigner" verify --verbose --print-certs "$apk" \
+            | tee "$RUNNER_TEMP/apk-signing.txt"
+          signing_digest=$(
+            sed -n 's/^Signer #1 certificate SHA-256 digest: //p' \
+              "$RUNNER_TEMP/apk-signing.txt"
+          )
+          test "$signing_digest" = "$ANDROID_SIGNING_CERT_SHA256"
+          ! grep -q '^Signer #2 certificate' "$RUNNER_TEMP/apk-signing.txt"
           "$ANDROID_BUILD_TOOLS_HOME/zipalign" -c -P 16 -v 4 "$apk"
           "$ANDROID_BUILD_TOOLS_HOME/aapt2" dump badging "$apk" \
             >"$RUNNER_TEMP/apk-badging.txt"
@@ -206,7 +241,8 @@ jobs:
             --arg archive '${{ steps.runtime.outputs.archive_name }}' \
             --arg archive_sha256 '${{ steps.runtime.outputs.archive_sha256 }}' \
             --arg source_sha "$GITHUB_SHA" \
-            '{release_tag: $release_tag, runtime_version: $runtime_version, source_archive: $archive, source_archive_sha256: $archive_sha256, plugin_source_sha: $source_sha}' \
+            --arg signing_cert_sha256 "$ANDROID_SIGNING_CERT_SHA256" \
+            '{release_tag: $release_tag, runtime_version: $runtime_version, source_archive: $archive, source_archive_sha256: $archive_sha256, plugin_source_sha: $source_sha, signing_certificate_sha256: $signing_cert_sha256}' \
             >dist/build-metadata.json
 
       - name: Upload installable APK artifact
@@ -224,9 +260,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          release_tag="naivefox-plugin-${{ steps.runtime.outputs.release_tag }}"
-          release_title="NaiveFox Android plugin ${{ steps.runtime.outputs.release_tag }}"
-          release_notes=$'Automated ARM64 Android plugin build for the latest non-prerelease NaiveFox embedded runtime.\n\nThe attached APK is signed with the CI debug key. See build-metadata.json for the runtime archive and source commit.'
+          plugin_revision="${GITHUB_SHA:0:12}"
+          release_tag="naivefox-plugin-${{ steps.runtime.outputs.release_tag }}-${plugin_revision}"
+          release_title="NaiveFox Android plugin ${{ steps.runtime.outputs.release_tag }} (${plugin_revision})"
+          release_notes=$'Automated ARM64 Android plugin build for the latest non-prerelease NaiveFox embedded runtime.\n\nThe APK is signed with the project release key. See build-metadata.json for the runtime archive, source commit, and signing certificate fingerprint.'
           release_files=(
             "dist/naivefox-plugin-${{ steps.runtime.outputs.release_tag }}-arm64-v8a.apk"
             "dist/naivefox-plugin-${{ steps.runtime.outputs.release_tag }}-arm64-v8a.apk.sha256"

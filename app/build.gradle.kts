@@ -7,6 +7,10 @@ val pluginVersionCode = providers.gradleProperty("pluginVersionCode")
     .map(String::toInt)
 val pluginVersionName = providers.gradleProperty("pluginVersionName")
     .orElse("development")
+val releaseStoreFile = providers.environmentVariable("NAIVEFOX_SIGNING_STORE_FILE")
+val releaseStorePassword = providers.environmentVariable("NAIVEFOX_SIGNING_STORE_PASSWORD")
+val releaseKeyAlias = providers.environmentVariable("NAIVEFOX_SIGNING_KEY_ALIAS")
+val releaseKeyPassword = providers.environmentVariable("NAIVEFOX_SIGNING_KEY_PASSWORD")
 
 android {
     namespace = "com.github.incident201.naivefox.plugin"
@@ -24,10 +28,19 @@ android {
         }
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile = releaseStoreFile.orNull?.let { file(it) }
+            storePassword = releaseStorePassword.orNull
+            keyAlias = releaseKeyAlias.orNull
+            keyPassword = releaseKeyPassword.orNull
+        }
+    }
+
     buildTypes {
         getByName("release") {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 
