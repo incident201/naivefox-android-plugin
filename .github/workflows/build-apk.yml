@@ -19,7 +19,7 @@ env:
 
 jobs:
   build:
-    name: Build and verify arm64-v8a APK
+    name: Build and verify classic + no-connect APKs
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     env:
@@ -78,11 +78,14 @@ jobs:
             exit 1
           fi
 
-      - name: Run runtime verifier tests
+      - name: Run runtime and transport selector tests
         shell: bash
         env:
           PYTHONPATH: scripts
-        run: python3 -m unittest discover -s tests -v
+        run: |
+          set -euo pipefail
+          for script in scripts/*.sh; do bash -n "$script"; done
+          python3 -m unittest discover -s tests -v
 
       - name: Fetch and verify latest NaiveFox Android runtime
         id: runtime
@@ -127,42 +130,13 @@ jobs:
           grep -Fqx 'NaiveFoxRequestStop' <<<"$symbols"
           grep -Fqx 'NaiveFoxVersion' <<<"$symbols"
 
-      - name: Build ARM64 native launcher with Android NDK
+      - name: Build and stage both ARM64 transport launchers
         shell: bash
         env:
           RUNTIME_ROOT: ${{ steps.runtime.outputs.runtime_root }}
-        run: |
-          set -euo pipefail
-          cmake -S native -B build/native -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake" \
-            -DANDROID_ABI=arm64-v8a \
-            -DANDROID_PLATFORM=android-26 \
-            -DANDROID_STL=none \
-            -DNAIVEFOX_PACKAGE_ROOT="$RUNTIME_ROOT"
-          cmake --build build/native --target naivefox_launcher --verbose
-          launcher=build/native/naivefox_launcher
-          test -x "$launcher"
-          readelf="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
-          "$readelf" --file-header "$launcher" >"$RUNNER_TEMP/launcher-header.txt"
-          grep -Eq '^  Class:[[:space:]]+ELF64$' "$RUNNER_TEMP/launcher-header.txt"
-          grep -Eq '^  Type:[[:space:]]+DYN' "$RUNNER_TEMP/launcher-header.txt"
-          grep -Eq '^  Machine:[[:space:]]+AArch64$' "$RUNNER_TEMP/launcher-header.txt"
-          "$readelf" --program-headers "$launcher" | grep -F '/system/bin/linker64'
-          "$readelf" --dynamic "$launcher" | grep -F 'Shared library: [libz.so]'
+        run: bash scripts/build-launchers.sh
 
-      - name: Stage manifest-driven APK inputs
-        shell: bash
-        env:
-          RUNTIME_ROOT: ${{ steps.runtime.outputs.runtime_root }}
-        run: |
-          set -euo pipefail
-          python3 scripts/stage_apk_inputs.py \
-            --runtime-root "$RUNTIME_ROOT" \
-            --launcher build/native/naivefox_launcher \
-            --output build/plugin-inputs
-
-      - name: Lint and assemble signed release APK
+      - name: Lint and assemble both signed release APKs
         shell: bash
         env:
           NAIVEFOX_SIGNING_STORE_FILE: ${{ runner.temp }}/naivefox-plugin-release.p12
@@ -174,113 +148,56 @@ jobs:
           ./gradlew --no-daemon --stacktrace \
             -PpluginVersionCode="${GITHUB_RUN_NUMBER}" \
             -PpluginVersionName="${{ steps.runtime.outputs.release_tag }}" \
-            :app:lintRelease :app:assembleRelease
+            :app:lintClassicRelease :app:assembleClassicRelease \
+            :app:lintNoConnectRelease :app:assembleNoConnectRelease
 
-      - name: Verify APK integration and payload
+      - name: Verify both APKs and fixed transport selection
         shell: bash
         env:
           RUNTIME_ROOT: ${{ steps.runtime.outputs.runtime_root }}
-        run: |
-          set -euo pipefail
-          source_apk=app/build/outputs/apk/release/app-release.apk
-          test -f "$source_apk"
-          mkdir -p dist
-          apk="dist/naivefox-plugin-${{ steps.runtime.outputs.release_tag }}-arm64-v8a.apk"
-          cp "$source_apk" "$apk"
+          RUNTIME_RELEASE_TAG: ${{ steps.runtime.outputs.release_tag }}
+          RUNTIME_VERSION: ${{ steps.runtime.outputs.runtime_version }}
+          RUNTIME_ARCHIVE: ${{ steps.runtime.outputs.archive_name }}
+          RUNTIME_ARCHIVE_SHA256: ${{ steps.runtime.outputs.archive_sha256 }}
+        run: bash scripts/verify-apks.sh
 
-          "$ANDROID_BUILD_TOOLS_HOME/apksigner" verify --verbose --print-certs "$apk" \
-            | tee "$RUNNER_TEMP/apk-signing.txt"
-          signing_digest=$(
-            sed -n 's/^Signer #1 certificate SHA-256 digest: //p' \
-              "$RUNNER_TEMP/apk-signing.txt"
-          )
-          test "$signing_digest" = "$ANDROID_SIGNING_CERT_SHA256"
-          ! grep -q '^Signer #2 certificate' "$RUNNER_TEMP/apk-signing.txt"
-          "$ANDROID_BUILD_TOOLS_HOME/zipalign" -c -P 16 -v 4 "$apk"
-          "$ANDROID_BUILD_TOOLS_HOME/aapt2" dump badging "$apk" \
-            >"$RUNNER_TEMP/apk-badging.txt"
-          grep -F "package: name='com.github.incident201.naivefox.plugin'" \
-            "$RUNNER_TEMP/apk-badging.txt"
-          grep -F "native-code: 'arm64-v8a'" "$RUNNER_TEMP/apk-badging.txt"
-          min_sdk=$(apkanalyzer manifest min-sdk "$apk")
-          test "$min_sdk" = "26"
-
-          "$ANDROID_BUILD_TOOLS_HOME/aapt2" dump xmltree "$apk" \
-            --file AndroidManifest.xml >"$RUNNER_TEMP/apk-manifest.txt"
-          grep -F 'io.nekohasekai.sagernet.plugin.ACTION_NATIVE_PLUGIN' \
-            "$RUNNER_TEMP/apk-manifest.txt"
-          grep -F 'io.nekohasekai.sagernet.plugin.id' "$RUNNER_TEMP/apk-manifest.txt"
-          grep -F 'naive-plugin' "$RUNNER_TEMP/apk-manifest.txt"
-          grep -F 'android:scheme' "$RUNNER_TEMP/apk-manifest.txt"
-          grep -F '"plugin"' "$RUNNER_TEMP/apk-manifest.txt"
-          grep -F 'io.nekohasekai.sagernet.plugin.executable_path' \
-            "$RUNNER_TEMP/apk-manifest.txt"
-          grep -F 'libnaivefox_launcher.so' "$RUNNER_TEMP/apk-manifest.txt"
-
-          python3 scripts/verify_apk.py \
-            --apk "$apk" \
-            --runtime-root "$RUNTIME_ROOT" \
-            --launcher build/native/naivefox_launcher
-
-          unzip -p "$apk" lib/arm64-v8a/libnaivefox_launcher.so \
-            >"$RUNNER_TEMP/apk-launcher"
-          chmod 755 "$RUNNER_TEMP/apk-launcher"
-          readelf="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
-          "$readelf" --file-header "$RUNNER_TEMP/apk-launcher" \
-            >"$RUNNER_TEMP/apk-launcher-header.txt"
-          grep -Eq '^  Type:[[:space:]]+DYN' "$RUNNER_TEMP/apk-launcher-header.txt"
-          grep -Eq '^  Machine:[[:space:]]+AArch64$' "$RUNNER_TEMP/apk-launcher-header.txt"
-
-          (
-            cd dist
-            sha256sum "$(basename "$apk")" >"$(basename "$apk").sha256"
-          )
-          jq -n \
-            --arg release_tag '${{ steps.runtime.outputs.release_tag }}' \
-            --arg runtime_version '${{ steps.runtime.outputs.runtime_version }}' \
-            --arg archive '${{ steps.runtime.outputs.archive_name }}' \
-            --arg archive_sha256 '${{ steps.runtime.outputs.archive_sha256 }}' \
-            --arg source_sha "$GITHUB_SHA" \
-            --arg signing_cert_sha256 "$ANDROID_SIGNING_CERT_SHA256" \
-            '{release_tag: $release_tag, runtime_version: $runtime_version, source_archive: $archive, source_archive_sha256: $archive_sha256, plugin_source_sha: $source_sha, signing_certificate_sha256: $signing_cert_sha256}' \
-            >dist/build-metadata.json
-
-      - name: Upload installable APK artifact
+      - name: Upload Classic APK artifact
         uses: actions/upload-artifact@v7
         with:
-          name: naivefox-plugin-${{ steps.runtime.outputs.release_tag }}-arm64-v8a
-          path: |
-            dist/*.apk
-            dist/*.apk.sha256
-            dist/build-metadata.json
+          name: naivefox-plugin-${{ steps.runtime.outputs.release_tag }}-classic-arm64-v8a
+          path: dist/classic/*
           if-no-files-found: error
           retention-days: 30
 
-      - name: Create or update GitHub Release
+      - name: Upload No-connect APK artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: naivefox-plugin-${{ steps.runtime.outputs.release_tag }}-no-connect-arm64-v8a
+          path: dist/no-connect/*
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish both transports in one GitHub Release
         shell: bash
         run: |
           set -euo pipefail
           plugin_revision="${GITHUB_SHA:0:12}"
           release_tag="naivefox-plugin-${{ steps.runtime.outputs.release_tag }}-${plugin_revision}"
           release_title="NaiveFox Android plugin ${{ steps.runtime.outputs.release_tag }} (${plugin_revision})"
-          release_notes=$'Automated ARM64 Android plugin build for the latest non-prerelease NaiveFox embedded runtime.\n\nThe APK is signed with the project release key. See build-metadata.json for the runtime archive, source commit, and signing certificate fingerprint.'
-          release_files=(
-            "dist/naivefox-plugin-${{ steps.runtime.outputs.release_tag }}-arm64-v8a.apk"
-            "dist/naivefox-plugin-${{ steps.runtime.outputs.release_tag }}-arm64-v8a.apk.sha256"
-            "dist/build-metadata.json"
-          )
+          release_notes=$'Two ARM64 Android APKs from the same latest NaiveFox runtime.\n\nChoose classic for standard Naive-compatible CONNECT servers, or no-connect for servers running the NaiveFox no-connect transport module. Both APKs use the same package ID and persistent release key: install only one; installing the other switches transport in place.\n\nEach APK includes a checksum and transport-specific build metadata. The Exclave profile and credentials are unchanged.'
+          release_files=(dist/classic/* dist/no-connect/*)
+          test "${#release_files[@]}" = 6
           if gh release view "$release_tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release edit "$release_tag" \
               --repo "$GITHUB_REPOSITORY" \
               --title "$release_title" \
-              --notes "$release_notes"
+              --notes "$release_notes" --latest
             gh release upload "$release_tag" "${release_files[@]}" \
-              --repo "$GITHUB_REPOSITORY" \
-              --clobber
+              --repo "$GITHUB_REPOSITORY" --clobber
           else
             gh release create "$release_tag" "${release_files[@]}" \
               --repo "$GITHUB_REPOSITORY" \
               --target "$GITHUB_SHA" \
               --title "$release_title" \
-              --notes "$release_notes"
+              --notes "$release_notes" --latest
           fi

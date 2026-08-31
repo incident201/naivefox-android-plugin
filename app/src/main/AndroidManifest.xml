@@ -21,6 +21,9 @@
         android:label="@string/app_name"
         android:roundIcon="@drawable/ic_plugin"
         android:supportsRtl="true">
+        <meta-data
+            android:name="com.github.incident201.naivefox.plugin.TRANSPORT"
+            android:value="${pluginTransport}" />
         <provider
             android:name=".RuntimeProvider"
             android:authorities="${applicationId}.RuntimeProvider"

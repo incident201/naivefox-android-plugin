@@ -33,12 +33,17 @@
 #include <zlib.h>
 
 #include "runtime_manifest.h"
+#include "transport_config.h"
 
 #ifndef NAIVEFOX_RUNTIME_RELATIVE_PATH
 #  error "NAIVEFOX_RUNTIME_RELATIVE_PATH must be supplied by CMake"
 #endif
 
-#define CONFIG_MAXIMUM_BYTES (1024U * 1024U)
+#ifndef NAIVEFOX_PLUGIN_TRANSPORT
+#  error "NAIVEFOX_PLUGIN_TRANSPORT must be supplied by CMake"
+#endif
+
+#define CONFIG_MAXIMUM_BYTES NAIVEFOX_CONFIG_MAXIMUM_BYTES
 #define REEXEC_MARKER "NAIVEFOX_LAUNCHER_REEXEC_PATH"
 #define RUNTIME_ROOT_ENV "NAIVEFOX_LAUNCHER_RUNTIME_ROOT"
 #define RUNTIME_ASSET_PREFIX "assets/plugin/runtime/"
@@ -712,6 +717,15 @@ int main(int argc, char* argv[]) {
     (void)RemoveProfile(runtime_root);
     return 2;
   }
+  char* selected_config = NULL;
+  if (!SelectTransport(config, NAIVEFOX_PLUGIN_TRANSPORT, &selected_config)) {
+    fprintf(stderr, "naive-plugin: cannot select transport: invalid, ambiguous, or oversized JSON\n");
+    free(config);
+    (void)RemoveProfile(runtime_root);
+    return 2;
+  }
+  free(config);
+  config = selected_config;
 
   char profile_path[PATH_MAX + 1];
   int profile_count = snprintf(profile_path, sizeof(profile_path),
@@ -762,6 +776,7 @@ int main(int argc, char* argv[]) {
     return 1;
   }
   fprintf(stderr, "naive-plugin: starting NaiveFox %s\n", version_text);
+  fprintf(stderr, "naive-plugin: transport=" NAIVEFOX_PLUGIN_TRANSPORT "\n");
 
   // Keep startup diagnostics narrow and useful when the host only exposes the
   // child process streams. This module reports the Android network readiness
