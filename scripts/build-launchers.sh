@@ -2,7 +2,7 @@
 set -euo pipefail
 
 readelf="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
-for transport in classic no-connect; do
+for transport in classic no-connect no-connect-hybrid; do
   build_dir="build/native-$transport"
   cmake -S native -B "$build_dir" -G Ninja \
     -DCMAKE_BUILD_TYPE=Release \

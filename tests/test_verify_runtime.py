@@ -15,7 +15,13 @@ class RuntimeVerificationTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary.name) / "naivefox-android-aarch64"
         self.root.mkdir()
-        self._write("include/NaiveFoxAPI.h", b"/* test API */\n", 0o644)
+        self._write(
+            "include/NaiveFoxAPI.h",
+            b"int NaiveFoxRunEmbedded(const char* aConfigJson, "
+            b"const char* aProfilePath, const char* aRuntimePath, "
+            b"const char* aTransport);\n",
+            0o644,
+        )
         self._write("lib/arm64-v8a/libxul.so", b"test-libxul", 0o755)
         self._write("lib/arm64-v8a/libdependency.so", b"test-dependency", 0o755)
         self._write("lib/arm64-v8a/omni.ja", b"test-omni", 0o644)
@@ -101,6 +107,21 @@ class RuntimeVerificationTests(unittest.TestCase):
         self.manifest["exported_symbols"].remove("NaiveFoxRequestStop")
         self._save_manifest()
         with self.assertRaisesRegex(VerificationError, "missing required symbols"):
+            verify_runtime(self.root)
+
+    def test_rejects_obsolete_three_argument_embedded_abi(self) -> None:
+        self._write(
+            "include/NaiveFoxAPI.h",
+            b"int NaiveFoxRunEmbedded(const char* aConfigJson, "
+            b"const char* aProfilePath, const char* aRuntimePath);\n",
+            0o644,
+        )
+        self.manifest["files"] = self._file_manifest()
+        self.manifest["total_bytes"] = sum(
+            item["size"] for item in self.manifest["files"]
+        )
+        self._save_manifest()
+        with self.assertRaisesRegex(VerificationError, "four-argument"):
             verify_runtime(self.root)
 
     def test_allows_same_basename_in_different_directories(self) -> None:

@@ -25,7 +25,11 @@ def main() -> int:
     parser.add_argument("--apk", type=Path, required=True)
     parser.add_argument("--runtime-root", type=Path, required=True)
     parser.add_argument("--launcher", type=Path, required=True)
-    parser.add_argument("--transport", choices=("classic", "no-connect"), required=True)
+    parser.add_argument(
+        "--transport",
+        choices=("classic", "no-connect", "no-connect-hybrid"),
+        required=True,
+    )
     parser.add_argument("--android-manifest", type=Path, required=True)
     arguments = parser.parse_args()
 
@@ -81,10 +85,12 @@ def main() -> int:
         marker = f"naive-plugin: transport={arguments.transport}\n".encode() + b"\0"
         if marker not in launcher_bytes:
             parser.error("APK launcher has the wrong fixed transport")
-        other_transport = "no-connect" if arguments.transport == "classic" else "classic"
-        other_marker = f"naive-plugin: transport={other_transport}\n".encode() + b"\0"
-        if other_marker in launcher_bytes:
-            parser.error("APK launcher contains conflicting transport markers")
+        for other_transport in ("classic", "no-connect", "no-connect-hybrid"):
+            if other_transport == arguments.transport:
+                continue
+            other_marker = f"naive-plugin: transport={other_transport}\n".encode() + b"\0"
+            if other_marker in launcher_bytes:
+                parser.error("APK launcher contains conflicting transport markers")
 
         manifest_apk_path = "assets/plugin/runtime/manifest.json"
         if package.read(manifest_apk_path) != (runtime_root / "manifest.json").read_bytes():

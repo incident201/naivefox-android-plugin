@@ -1,10 +1,13 @@
 cmake_minimum_required(VERSION 3.22)
 project(naivefox_android_launcher LANGUAGES C)
 
-set(NAIVEFOX_PLUGIN_TRANSPORT "" CACHE STRING "Fixed APK transport: classic or no-connect")
+set(NAIVEFOX_PLUGIN_TRANSPORT "" CACHE STRING
+    "Fixed APK transport: classic, no-connect, or no-connect-hybrid")
 if(NOT NAIVEFOX_PLUGIN_TRANSPORT STREQUAL "classic"
-        AND NOT NAIVEFOX_PLUGIN_TRANSPORT STREQUAL "no-connect")
-    message(FATAL_ERROR "NAIVEFOX_PLUGIN_TRANSPORT must be classic or no-connect")
+        AND NOT NAIVEFOX_PLUGIN_TRANSPORT STREQUAL "no-connect"
+        AND NOT NAIVEFOX_PLUGIN_TRANSPORT STREQUAL "no-connect-hybrid")
+    message(FATAL_ERROR
+        "NAIVEFOX_PLUGIN_TRANSPORT must be classic, no-connect, or no-connect-hybrid")
 endif()
 
 if(NOT DEFINED NAIVEFOX_PACKAGE_ROOT)
@@ -44,7 +47,7 @@ else()
 endif()
 configure_file(runtime_manifest.h.in runtime_manifest.h @ONLY)
 
-add_executable(naivefox_launcher launcher.c transport_config.c)
+add_executable(naivefox_launcher launcher.c)
 target_compile_features(naivefox_launcher PRIVATE c_std_11)
 target_include_directories(naivefox_launcher PRIVATE
     "${NAIVEFOX_PACKAGE_ROOT}/include"

@@ -2,10 +2,11 @@
 set -euo pipefail
 
 readelf="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
-for transport in classic no-connect; do
+for transport in classic no-connect no-connect-hybrid; do
   case "$transport" in
     classic) flavor=classic; label='NaiveFox Plugin — Classic' ;;
     no-connect) flavor=noConnect; label='NaiveFox Plugin — No-connect' ;;
+    no-connect-hybrid) flavor=noConnectHybrid; label='NaiveFox Plugin — No-connect Hybrid' ;;
   esac
   source_apk="app/build/outputs/apk/$flavor/release/app-$flavor-release.apk"
   test -f "$source_apk"

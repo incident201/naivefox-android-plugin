@@ -19,7 +19,7 @@ env:
 
 jobs:
   build:
-    name: Build and verify classic + no-connect APKs
+    name: Build and verify three transport APKs
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     env:
@@ -78,7 +78,7 @@ jobs:
             exit 1
           fi
 
-      - name: Run runtime and transport selector tests
+      - name: Run runtime contract tests
         shell: bash
         env:
           PYTHONPATH: scripts
@@ -130,13 +130,13 @@ jobs:
           grep -Fqx 'NaiveFoxRequestStop' <<<"$symbols"
           grep -Fqx 'NaiveFoxVersion' <<<"$symbols"
 
-      - name: Build and stage both ARM64 transport launchers
+      - name: Build and stage three ARM64 transport launchers
         shell: bash
         env:
           RUNTIME_ROOT: ${{ steps.runtime.outputs.runtime_root }}
         run: bash scripts/build-launchers.sh
 
-      - name: Lint and assemble both signed release APKs
+      - name: Lint and assemble three signed release APKs
         shell: bash
         env:
           NAIVEFOX_SIGNING_STORE_FILE: ${{ runner.temp }}/naivefox-plugin-release.p12
@@ -149,9 +149,10 @@ jobs:
             -PpluginVersionCode="${GITHUB_RUN_NUMBER}" \
             -PpluginVersionName="${{ steps.runtime.outputs.release_tag }}" \
             :app:lintClassicRelease :app:assembleClassicRelease \
-            :app:lintNoConnectRelease :app:assembleNoConnectRelease
+            :app:lintNoConnectRelease :app:assembleNoConnectRelease \
+            :app:lintNoConnectHybridRelease :app:assembleNoConnectHybridRelease
 
-      - name: Verify both APKs and fixed transport selection
+      - name: Verify three APKs and fixed transport selection
         shell: bash
         env:
           RUNTIME_ROOT: ${{ steps.runtime.outputs.runtime_root }}
@@ -177,16 +178,25 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Publish both transports in one GitHub Release
+      - name: Upload No-connect Hybrid APK artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: naivefox-plugin-${{ steps.runtime.outputs.release_tag }}-no-connect-hybrid-arm64-v8a
+          path: dist/no-connect-hybrid/*
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish three transports in one GitHub Release
         shell: bash
         run: |
           set -euo pipefail
           plugin_revision="${GITHUB_SHA:0:12}"
           release_tag="naivefox-plugin-${{ steps.runtime.outputs.release_tag }}-${plugin_revision}"
           release_title="NaiveFox Android plugin ${{ steps.runtime.outputs.release_tag }} (${plugin_revision})"
-          release_notes=$'Two ARM64 Android APKs from the same latest NaiveFox runtime.\n\nChoose classic for standard Naive-compatible CONNECT servers, or no-connect for servers running the NaiveFox no-connect transport module. Both APKs use the same package ID and persistent release key: install only one; installing the other switches transport in place.\n\nEach APK includes a checksum and transport-specific build metadata. The Exclave profile and credentials are unchanged.'
+          release_notes=$'Three ARM64 Android APKs from the same latest NaiveFox runtime.\n\nChoose classic for standard Naive-compatible CONNECT servers; no-connect for strict H2/H3 finite exchanges; or experimental no-connect-hybrid for H2/H3 startup followed by native WebSocket over TLS/TCP. The two no-connect variants require matching server support.\n\nAll APKs use the same package ID and persistent release key: install only one; installing another variant switches transport in place. Each APK includes a checksum and transport-specific build metadata. The Exclave profile, JSON bytes, and credentials are unchanged.'
           release_files=(dist/classic/* dist/no-connect/*)
-          test "${#release_files[@]}" = 6
+          release_files+=(dist/no-connect-hybrid/*)
+          test "${#release_files[@]}" = 9
           if gh release view "$release_tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release edit "$release_tag" \
               --repo "$GITHUB_REPOSITORY" \

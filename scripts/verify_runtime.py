@@ -203,6 +203,20 @@ def verify_runtime(root_value: str | os.PathLike[str] | Path) -> dict[str, Any]:
         if not required.is_file():
             _fail(f"required runtime file is missing: {required.relative_to(root).as_posix()}")
 
+    api_header = (root / "include" / "NaiveFoxAPI.h").read_text(encoding="utf-8")
+    embedded_match = re.search(
+        r"NaiveFoxRunEmbedded\s*\(([^;]*)\)\s*;", api_header, re.DOTALL
+    )
+    if not embedded_match:
+        _fail("NaiveFoxAPI.h is missing NaiveFoxRunEmbedded declaration")
+    embedded_parameters = [
+        parameter.strip() for parameter in embedded_match.group(1).split(",")
+    ]
+    if len(embedded_parameters) != 4 or not re.search(
+        r"\bconst\s+char\s*\*\s*aTransport\b", embedded_parameters[3]
+    ):
+        _fail("NaiveFoxRunEmbedded must use the four-argument transport ABI")
+
     return {
         "root": str(root),
         "version": version,
