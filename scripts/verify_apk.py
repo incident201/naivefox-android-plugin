@@ -27,7 +27,7 @@ def main() -> int:
     parser.add_argument("--launcher", type=Path, required=True)
     parser.add_argument(
         "--transport",
-        choices=("classic", "no-connect", "no-connect-hybrid"),
+        choices=("classic", "no-connect"),
         required=True,
     )
     parser.add_argument("--android-manifest", type=Path, required=True)
@@ -85,7 +85,7 @@ def main() -> int:
         marker = f"naive-plugin: transport={arguments.transport}\n".encode() + b"\0"
         if marker not in launcher_bytes:
             parser.error("APK launcher has the wrong fixed transport")
-        for other_transport in ("classic", "no-connect", "no-connect-hybrid"):
+        for other_transport in ("classic", "no-connect"):
             if other_transport == arguments.transport:
                 continue
             other_marker = f"naive-plugin: transport={other_transport}\n".encode() + b"\0"

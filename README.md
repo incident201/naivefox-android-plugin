@@ -6,7 +6,7 @@ An ARM64 Android plugin that lets
 `naive-plugin`. This project does not build Firefox or NaiveFox from source.
 On every build, GitHub Actions downloads the latest non-prerelease Android
 embedded runtime from NaiveFox releases, verifies it, and packages it into an
-three installable APKs, one for each transport.
+two installable APKs, one for each transport.
 
 The plugin supports `arm64-v8a` devices running Android API 26 or newer.
 
@@ -14,23 +14,21 @@ The plugin supports `arm64-v8a` devices running Android API 26 or newer.
 
 - **Classic** (`*-classic-arm64-v8a.apk`): standard Naive-compatible CONNECT,
   for example Caddy with `forwardproxy@naive`.
-- **No-connect** (`*-no-connect-arm64-v8a.apk`): NaiveFox's GET/POST transport;
+- **No-connect** (`*-no-connect-arm64-v8a.apk`): fixed HTTP startup followed by
+  a persistent shaped native WebSocket over TLS/TCP;
   requires the [NaiveFox transport server module](https://github.com/incident201/naivefox-transport).
   An ordinary NaiveProxy server alone cannot serve this transport. There is no
-  automatic fallback to classic.
-- **No-connect Hybrid** (`*-no-connect-hybrid-arm64-v8a.apk`): experimental
-  H2/H3 startup followed by one native WebSocket over TLS/TCP per carrier. It
-  requires matching hybrid server support and TCP access even after H3 startup;
-  it is not WebSocket over QUIC and does not fall back to another transport.
+  automatic fallback to classic. With `quic://`, no-connect requires UDP for
+  H3 startup and TCP for WSS; it is not WebSocket over QUIC.
 
-All variants keep the same `naive-plugin` id, Android package ID, and permanent
-signing key. Install only one variant. Installing another APK from the same
+Both variants keep the same `naive-plugin` id, Android package ID, and permanent
+signing key. Install only one variant. Installing the other APK from the same
 or a newer build switches transport in place, without uninstalling or recreating
 the Exclave profile. Android rejects downgrades to older build version codes.
 
 The APK determines the transport. `https://` and `quic://` in the Exclave
-profile still select H2 and H3 independently; all transports use the existing
-proxy URI username and password. See the upstream
+profile still select H2 and H3 startup independently; both transports use the
+existing proxy URI username and password. See the upstream
 [transport contract](https://github.com/incident201/naivefox/blob/naivefox-minimal-source/netwerk/naivefox/NO-CONNECT.md).
 
 ## How it works
@@ -63,8 +61,8 @@ discovery contract used by the original
 4. Exclave runs `naive-plugin <config-file-path>` and passes its environment,
    including `SSL_CERT_FILE`.
 5. The launcher leaves the JSON bytes unchanged and passes the APK variant as
-   the fourth `NaiveFoxRunEmbedded` argument (`classic`, `no-connect`, or
-   `no-connect-hybrid`). This explicitly overrides any JSON transport using
+   the fourth `NaiveFoxRunEmbedded` argument (`classic` or `no-connect`). This
+   explicitly overrides any JSON transport using
    NaiveFox's public ABI. It creates a temporary writable Gecko profile,
    re-executes itself with the extracted
    runtime on `LD_LIBRARY_PATH`, loads `libxul.so`, and calls
@@ -103,15 +101,16 @@ On a clean `ubuntu-24.04` runner, the workflow:
 - rejects unsafe archive entries and verifies every manifest path, hash, size,
   and mode;
 - verifies that the downloaded header exposes the four-argument embedded ABI;
-- builds three launchers with fixed transport arguments using Android NDK r29 for API 26;
-- runs Android lint and builds the Classic, No-connect, and No-connect Hybrid release flavors;
+- builds two launchers with fixed transport arguments using Android NDK r29
+  for API 26;
+- runs Android lint and builds the Classic and No-connect release flavors;
 - verifies signing, zip alignment, package/provider/plugin metadata, ABI/ELF,
   transport metadata and launcher markers, and the complete runtime payload in each APK;
 - uploads `naivefox-plugin-<latest-release-tag>-<transport>-arm64-v8a` artifacts,
   each containing an APK, its SHA-256 file, and `build-metadata-<transport>.json`;
 - creates or updates the GitHub Release
-  `naivefox-plugin-<latest-release-tag>-<plugin-commit>` with all nine files attached,
-  only after all three APKs pass verification.
+  `naivefox-plugin-<latest-release-tag>-<plugin-commit>` with all six files attached,
+  only after both APKs pass verification.
 
 No concrete NaiveFox version or release tag is stored in the repository. A
 rebuild always follows the latest compatible release available at that time.

@@ -53,12 +53,6 @@ android {
             resValue("string", "app_name", "NaiveFox Plugin — No-connect")
             manifestPlaceholders["pluginTransport"] = "no-connect"
         }
-        create("noConnectHybrid") {
-            dimension = "transport"
-            versionNameSuffix = "-no-connect-hybrid"
-            resValue("string", "app_name", "NaiveFox Plugin — No-connect Hybrid")
-            manifestPlaceholders["pluginTransport"] = "no-connect-hybrid"
-        }
     }
 
     buildTypes {
@@ -92,7 +86,6 @@ android {
     mapOf(
         "classic" to "classic",
         "noConnect" to "no-connect",
-        "noConnectHybrid" to "no-connect-hybrid",
     ).forEach { (flavor, transport) ->
         sourceSets.getByName(flavor) {
             assets.srcDir(rootProject.file("build/plugin-inputs/$transport/assets"))
