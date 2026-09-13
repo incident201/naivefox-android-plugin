@@ -23,13 +23,14 @@ class LauncherContractTests(unittest.TestCase):
         self.assertIn('"NaiveFoxNetworkStartup:5"', source)
         self.assertIn("NaiveFox exited with status %d", source)
 
-    def test_transport_uses_four_argument_public_embedded_abi(self) -> None:
+    def test_uses_current_three_argument_public_embedded_abi(self) -> None:
         source = LAUNCHER.read_text(encoding="utf-8")
         self.assertIn("__typeof__(&NaiveFoxRunEmbedded)", source)
         self.assertIn(
-            "run(config, profile_path, runtime_path, NAIVEFOX_PLUGIN_TRANSPORT)",
+            "run(config, profile_path, runtime_path)",
             source,
         )
+        self.assertNotIn("NAIVEFOX_PLUGIN_TRANSPORT", source)
         self.assertNotIn("SelectTransport", source)
 
 

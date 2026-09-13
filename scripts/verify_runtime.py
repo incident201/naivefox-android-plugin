@@ -212,10 +212,10 @@ def verify_runtime(root_value: str | os.PathLike[str] | Path) -> dict[str, Any]:
     embedded_parameters = [
         parameter.strip() for parameter in embedded_match.group(1).split(",")
     ]
-    if len(embedded_parameters) != 4 or not re.search(
-        r"\bconst\s+char\s*\*\s*aTransport\b", embedded_parameters[3]
+    if len(embedded_parameters) != 3 or not re.search(
+        r"\bconst\s+char\s*\*\s*aRuntimePath\b", embedded_parameters[2]
     ):
-        _fail("NaiveFoxRunEmbedded must use the four-argument transport ABI")
+        _fail("NaiveFoxRunEmbedded must use the current three-argument ABI")
 
     return {
         "root": str(root),

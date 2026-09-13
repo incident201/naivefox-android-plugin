@@ -38,10 +38,6 @@
 #  error "NAIVEFOX_RUNTIME_RELATIVE_PATH must be supplied by CMake"
 #endif
 
-#ifndef NAIVEFOX_PLUGIN_TRANSPORT
-#  error "NAIVEFOX_PLUGIN_TRANSPORT must be supplied by CMake"
-#endif
-
 #define CONFIG_MAXIMUM_BYTES (1024U * 1024U)
 #define REEXEC_MARKER "NAIVEFOX_LAUNCHER_REEXEC_PATH"
 #define RUNTIME_ROOT_ENV "NAIVEFOX_LAUNCHER_RUNTIME_ROOT"
@@ -768,7 +764,6 @@ int main(int argc, char* argv[]) {
     return 1;
   }
   fprintf(stderr, "naive-plugin: starting NaiveFox %s\n", version_text);
-  fprintf(stderr, "naive-plugin: transport=" NAIVEFOX_PLUGIN_TRANSPORT "\n");
 
   // Keep startup diagnostics narrow and useful when the host only exposes the
   // child process streams. This module reports the Android network readiness
@@ -797,8 +792,7 @@ int main(int argc, char* argv[]) {
   }
 
   atomic_store_explicit(&stop_context.run_entered, true, memory_order_release);
-  int run_status =
-      run(config, profile_path, runtime_path, NAIVEFOX_PLUGIN_TRANSPORT);
+  int run_status = run(config, profile_path, runtime_path);
   if (run_status != NAIVEFOX_STATUS_OK) {
     fprintf(stderr, "naive-plugin: NaiveFox exited with status %d\n",
             run_status);

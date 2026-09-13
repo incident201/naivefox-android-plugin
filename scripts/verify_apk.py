@@ -25,11 +25,6 @@ def main() -> int:
     parser.add_argument("--apk", type=Path, required=True)
     parser.add_argument("--runtime-root", type=Path, required=True)
     parser.add_argument("--launcher", type=Path, required=True)
-    parser.add_argument(
-        "--transport",
-        choices=("classic", "no-connect"),
-        required=True,
-    )
     parser.add_argument("--android-manifest", type=Path, required=True)
     arguments = parser.parse_args()
 
@@ -38,10 +33,11 @@ def main() -> int:
     app = manifest_xml.find("application")
     if manifest_xml.get("package") != "com.github.incident201.naivefox.plugin" or app is None:
         parser.error("unexpected Android package/application")
-    metadata = {entry.get(android + "name"): entry.get(android + "value")
-                for entry in app.findall("meta-data")}
-    if metadata.get("com.github.incident201.naivefox.plugin.TRANSPORT") != arguments.transport:
-        parser.error("Android manifest transport differs from launcher flavor")
+    application_metadata_names = {
+        entry.get(android + "name") for entry in app.findall("meta-data")
+    }
+    if "com.github.incident201.naivefox.plugin.TRANSPORT" in application_metadata_names:
+        parser.error("obsolete transport selector metadata is present")
     providers = app.findall("provider")
     if len(providers) != 1:
         parser.error("expected exactly one native plugin provider")
@@ -82,15 +78,6 @@ def main() -> int:
         expected_launcher = launcher.read_bytes()
         if launcher_bytes != expected_launcher:
             parser.error("APK launcher differs from the verified NDK output")
-        marker = f"naive-plugin: transport={arguments.transport}\n".encode() + b"\0"
-        if marker not in launcher_bytes:
-            parser.error("APK launcher has the wrong fixed transport")
-        for other_transport in ("classic", "no-connect"):
-            if other_transport == arguments.transport:
-                continue
-            other_marker = f"naive-plugin: transport={other_transport}\n".encode() + b"\0"
-            if other_marker in launcher_bytes:
-                parser.error("APK launcher contains conflicting transport markers")
 
         manifest_apk_path = "assets/plugin/runtime/manifest.json"
         if package.read(manifest_apk_path) != (runtime_root / "manifest.json").read_bytes():

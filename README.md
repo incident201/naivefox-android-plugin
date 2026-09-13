@@ -6,30 +6,18 @@ An ARM64 Android plugin that lets
 `naive-plugin`. This project does not build Firefox or NaiveFox from source.
 On every build, GitHub Actions downloads the latest non-prerelease Android
 embedded runtime from NaiveFox releases, verifies it, and packages it into an
-two installable APKs, one for each transport.
+installable APK.
 
 The plugin supports `arm64-v8a` devices running Android API 26 or newer.
 
-## Choose a transport
+## Compatibility
 
-- **Classic** (`*-classic-arm64-v8a.apk`): standard Naive-compatible CONNECT,
-  for example Caddy with `forwardproxy@naive`.
-- **No-connect** (`*-no-connect-arm64-v8a.apk`): fixed HTTP startup followed by
-  a persistent shaped native WebSocket over TLS/TCP;
-  requires the [NaiveFox transport server module](https://github.com/incident201/naivefox-transport).
-  An ordinary NaiveProxy server alone cannot serve this transport. There is no
-  automatic fallback to classic. With `quic://`, no-connect requires UDP for
-  H3 startup and TCP for WSS; it is not WebSocket over QUIC.
-
-Both variants keep the same `naive-plugin` id, Android package ID, and permanent
-signing key. Install only one variant. Installing the other APK from the same
-or a newer build switches transport in place, without uninstalling or recreating
-the Exclave profile. Android rejects downgrades to older build version codes.
-
-The APK determines the transport. `https://` and `quic://` in the Exclave
-profile still select H2 and H3 startup independently; both transports use the
-existing proxy URI username and password. See the upstream
-[transport contract](https://github.com/incident201/naivefox/blob/naivefox-minimal-source/netwerk/naivefox/NO-CONNECT.md).
+Current NaiveFox has one transport and no transport selector. Client and server
+must be updated together using the matching
+[naivefox-transport](https://github.com/incident201/naivefox-transport) server
+module and application assets. Classic NaiveProxy, old NaiveFox clients or
+servers, alternate wire versions, and compatibility profiles are not supported.
+The `https://` and `quic://` proxy schemes still select H2 and H3 startup.
 
 ## How it works
 
@@ -60,13 +48,10 @@ discovery contract used by the original
 
 4. Exclave runs `naive-plugin <config-file-path>` and passes its environment,
    including `SSL_CERT_FILE`.
-5. The launcher leaves the JSON bytes unchanged and passes the APK variant as
-   the fourth `NaiveFoxRunEmbedded` argument (`classic` or `no-connect`). This
-   explicitly overrides any JSON transport using
-   NaiveFox's public ABI. It creates a temporary writable Gecko profile,
-   re-executes itself with the extracted
+5. The launcher leaves the JSON bytes unchanged, creates a temporary writable
+   Gecko profile, re-executes itself with the extracted
    runtime on `LD_LIBRARY_PATH`, loads `libxul.so`, and calls
-   `NaiveFoxRunEmbedded`.
+   the current three-argument `NaiveFoxRunEmbedded` API.
 6. The launcher translates `SIGTERM`, used by Exclave to stop a plugin process,
    into `NaiveFoxRequestStop`. It removes the temporary profile after a normal
    runtime shutdown, then removes both temporary directories.
@@ -74,9 +59,8 @@ discovery contract used by the original
 The launcher does not contain a fixed list of shared libraries. It extracts
 every runtime asset under the package prefix, while file names, sizes, and
 hashes are verified against `manifest.json` during the build. NaiveFox itself
-parses and validates the config. The plugin does not implement either proxy
-transport. `NaiveFoxRunEmbedded` itself parses and validates the unchanged
-Exclave JSON.
+parses and validates the config. The plugin does not implement the proxy
+transport.
 
 ## GitHub Actions build
 
@@ -100,31 +84,29 @@ On a clean `ubuntu-24.04` runner, the workflow:
 - verifies the archive checksum before extraction;
 - rejects unsafe archive entries and verifies every manifest path, hash, size,
   and mode;
-- verifies that the downloaded header exposes the four-argument embedded ABI;
-- builds two launchers with fixed transport arguments using Android NDK r29
-  for API 26;
-- runs Android lint and builds the Classic and No-connect release flavors;
+- verifies that the downloaded header exposes the current three-argument ABI;
+- builds the launcher using Android NDK r29 for API 26;
+- runs Android lint and builds one signed release APK;
 - verifies signing, zip alignment, package/provider/plugin metadata, ABI/ELF,
-  transport metadata and launcher markers, and the complete runtime payload in each APK;
-- uploads `naivefox-plugin-<latest-release-tag>-<transport>-arm64-v8a` artifacts,
-  each containing an APK, its SHA-256 file, and `build-metadata-<transport>.json`;
+  and the complete runtime payload inside the APK;
+- uploads `naivefox-plugin-<latest-release-tag>-arm64-v8a`, containing the APK,
+  its SHA-256 file, and `build-metadata.json`;
 - creates or updates the GitHub Release
-  `naivefox-plugin-<latest-release-tag>-<plugin-commit>` with all six files attached,
-  only after both APKs pass verification.
+  `naivefox-plugin-<latest-release-tag>-<plugin-commit>` with those three files.
 
 No concrete NaiveFox version or release tag is stored in the repository. A
 rebuild always follows the latest compatible release available at that time.
 
 ## Installation and use
 
-1. Download the desired transport APK from the GitHub Release created by a successful manual
+1. Download the APK from the GitHub Release created by a successful manual
    workflow run (the Actions artifact is also retained for 30 days).
 2. On older Exclave/SagerNet forks, uninstall the original NaiveProxy plugin
    first. Installing two applications that both publish the `naive-plugin` id
    can make provider selection ambiguous.
 3. Install the APK on an ARM64 device running Android 8.0 or newer.
 4. Use an ordinary Naive profile in Exclave and connect. Exclave requires no
-   changes; transport selection is supplied by the installed APK.
+   changes.
 
 Release APKs are signed with the project's persistent release key. Once a
 release-signed APK is installed, later releases can update it without removing

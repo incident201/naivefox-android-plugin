@@ -22,6 +22,7 @@ android {
         targetSdk = 36
         versionCode = pluginVersionCode.get()
         versionName = pluginVersionName.get()
+        resValue("string", "app_name", "NaiveFox Plugin")
 
         ndk {
             abiFilters += "arm64-v8a"
@@ -34,24 +35,6 @@ android {
             storePassword = releaseStorePassword.orNull
             keyAlias = releaseKeyAlias.orNull
             keyPassword = releaseKeyPassword.orNull
-        }
-    }
-
-    // Deliberately keep one applicationId: only one naive-plugin provider may
-    // be installed, and the persistent key permits switching APKs in place.
-    flavorDimensions += "transport"
-    productFlavors {
-        create("classic") {
-            dimension = "transport"
-            versionNameSuffix = "-classic"
-            resValue("string", "app_name", "NaiveFox Plugin — Classic")
-            manifestPlaceholders["pluginTransport"] = "classic"
-        }
-        create("noConnect") {
-            dimension = "transport"
-            versionNameSuffix = "-no-connect"
-            resValue("string", "app_name", "NaiveFox Plugin — No-connect")
-            manifestPlaceholders["pluginTransport"] = "no-connect"
         }
     }
 
@@ -83,14 +66,9 @@ android {
         )
     }
 
-    mapOf(
-        "classic" to "classic",
-        "noConnect" to "no-connect",
-    ).forEach { (flavor, transport) ->
-        sourceSets.getByName(flavor) {
-            assets.srcDir(rootProject.file("build/plugin-inputs/$transport/assets"))
-            jniLibs.srcDir(rootProject.file("build/plugin-inputs/$transport/jniLibs"))
-        }
+    sourceSets.getByName("main") {
+        assets.srcDir(rootProject.file("build/plugin-inputs/assets"))
+        jniLibs.srcDir(rootProject.file("build/plugin-inputs/jniLibs"))
     }
 
     lint {
