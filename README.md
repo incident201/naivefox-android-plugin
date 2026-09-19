@@ -12,12 +12,25 @@ The plugin supports `arm64-v8a` devices running Android API 26 or newer.
 
 ## Compatibility
 
-Current NaiveFox has one transport and no transport selector. Client and server
-must be updated together using the matching
+NaiveFox uses one current application protocol with explicit delivery schemes.
+Update its native runtime and the matching
 [naivefox-transport](https://github.com/incident201/naivefox-transport) server
-module and application assets. Classic NaiveProxy, old NaiveFox clients or
-servers, alternate wire versions, and compatibility profiles are not supported.
-The `https://` and `quic://` proxy schemes still select H2 and H3 startup.
+together. Older wire contracts and compatibility profiles are not supported.
+
+| Protocol field | Delivery | Username |
+| --- | --- | --- |
+| https | Default packet delivery over H2, direct or through a compatible CDN | user~PIN; PIN is mandatory |
+| wss | WebSocket after H2 startup | user or user~PIN; the runtime strips and ignores the suffix |
+| quic | Native HTTP/3 | Ordinary authentication username |
+
+PIN is the 64-hex SHA-256 SPKI fingerprint of the origin's dedicated inner-TLS
+certificate. Keep it in the existing username field; no new JSON field or
+plugin setting is needed. Enter the selected scheme in the host application's
+protocol field. A host with a free-text protocol field can pass wss unchanged;
+the plugin does not supply or restrict the host's protocol picker.
+
+Leave unsupported host extensions such as extra headers and insecure
+concurrency unset. NaiveFox validates the JSON itself.
 
 ## How it works
 
@@ -105,8 +118,10 @@ rebuild always follows the latest compatible release available at that time.
    first. Installing two applications that both publish the `naive-plugin` id
    can make provider selection ambiguous.
 3. Install the APK on an ARM64 device running Android 8.0 or newer.
-4. Use an ordinary Naive profile in Exclave and connect. Exclave requires no
-   changes.
+4. Use a Naive profile in Exclave or a compatible host. For the default
+   transport, select https and set the username to user~PIN. Keep the domain,
+   port and password in their existing fields. The launcher forwards the
+   resulting JSON unchanged.
 
 Release APKs are signed with the project's persistent release key. Once a
 release-signed APK is installed, later releases can update it without removing
