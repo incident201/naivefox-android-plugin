@@ -1,5 +1,9 @@
 # NaiveFox Android Plugin for Exclave
 
+NaiveFox Android Plugin is a research project created entirely with AI. This covers all
+project-specific code and documentation; upstream dependencies retain their
+original authorship and licenses.
+
 An ARM64 Android plugin that lets
 [Exclave](https://github.com/ExclaveNetwork/Exclave) run
 [NaiveFox](https://github.com/incident201/naivefox) as the standard native

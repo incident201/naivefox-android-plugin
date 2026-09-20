@@ -1,5 +1,9 @@
 # Third-party notices
 
+NaiveFox Android Plugin is a research project created entirely with AI. This covers all
+project-specific code and documentation; upstream dependencies retain their
+original authorship and licenses.
+
 ## NaiveFox
 
 The build workflow downloads the latest compatible Android embedded runtime from

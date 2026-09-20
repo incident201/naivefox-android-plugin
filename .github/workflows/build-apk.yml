@@ -175,7 +175,7 @@ jobs:
           plugin_revision="${GITHUB_SHA:0:12}"
           release_tag="naivefox-plugin-${{ steps.runtime.outputs.release_tag }}-${plugin_revision}"
           release_title="NaiveFox Android plugin ${{ steps.runtime.outputs.release_tag }} (${plugin_revision})"
-          release_notes=$'ARM64 Android plugin built from the latest NaiveFox embedded runtime.\n\nUpdate the native runtime and matching naivefox-transport server together. HTTPS is the default packet delivery and requires username~PIN. WSS explicitly selects WebSocket and ignores the PIN suffix; QUIC retains HTTP/3. The host protocol value, JSON bytes, and username are passed unchanged; no additional plugin fields are required.\n\nThe APK uses the project persistent release key. Its checksum and build metadata are attached.'
+          release_notes=$'NaiveFox Android Plugin is a research project whose project-specific code and documentation were created entirely with AI.\n\nARM64 Android plugin built from the latest NaiveFox embedded runtime.\n\nUpdate the native runtime and matching naivefox-transport server together. HTTPS is the default packet delivery and requires username~PIN. WSS explicitly selects WebSocket and ignores the PIN suffix; QUIC retains HTTP/3. The host protocol value, JSON bytes, and username are passed unchanged; no additional plugin fields are required.\n\nThe APK uses the project persistent release key. Its checksum and build metadata are attached.'
           release_files=(dist/*)
           test "${#release_files[@]}" = 3
           if gh release view "$release_tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
